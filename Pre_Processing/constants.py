@@ -8,5 +8,5 @@ LABEL_NAME = 'seg'
 CHOSEN_SCAN_TYPE = 't1c'
 
 # Image Thresholding
-THRESHOLD=0.25
+THRESHOLD=1 # The percentage of bright pixels to keep.
 SCALE=1.0

@@ -1,5 +1,4 @@
 import os
-import Pre_Processing.constants as constants
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,9 +8,18 @@ from scipy.ndimage import gaussian_filter
 import Pre_Processing.constants as constants
 
 def normalize_image(img):
-    lower = np.percentile(img, 1)
-    upper = np.percentile(img, 99)
-    return np.clip((img - lower) / (upper - lower), 0, 1)
+    '''
+    Normalizes the input image using the z-score method.
+
+    Parameters:
+    - img(Image): the input image
+
+    Returns:
+    - img(Image): the output image after applying the zscore method.
+    '''
+    mean = np.mean(img)
+    std = np.std(img)
+    return (img - mean) / std
     
 def apply_threshold_contrast(input_file, threshold=constants.THRESHOLD, scale=constants.SCALE, display_image=False):
     '''
@@ -24,26 +32,34 @@ def apply_threshold_contrast(input_file, threshold=constants.THRESHOLD, scale=co
 
     Returns:
     - result(string): path to the saved image
-
     '''
     img = nib.load(input_file)
     volume = img.get_fdata()
 
-    enhanced = normalize_image(volume)
-    threshold = np.percentile(enhanced, 100 - 1)
-    enhanced[enhanced < threshold] = 0
-   # enhanced = (enhanced - threshold) * scale
+    # Normalizing the image.
+    normalized_img = normalize_image(volume)
+
+    # Applying the threshold.
+    enhanced = np.copy(volume)
+    threshold = np.percentile(normalized_img, 100 - threshold)
+    enhanced[normalized_img <= threshold] = 0
+
+    # Clipping the output to the correct range.
     enhanced_data = np.clip(enhanced, 0, np.max(enhanced))
 
+    # Generating the output image.
     enhanced_img = nib.Nifti1Image(enhanced_data, img.affine, img.header)
 
+    # Saving the output image.
     parent_dir = os.path.dirname(input_file)
-    nib.save(enhanced_img, parent_dir + '/' + os.path.basename(parent_dir) + '-thresholded.nii.gz')
+    output_image_name = parent_dir + '/' + os.path.basename(parent_dir) + '-thresholded.nii.gz'
+    nib.save(enhanced_img, output_image_name)
 
+    # Displaying the output image.
     if display_image:
         plt.imshow(enhanced_data[:, :, enhanced_data.shape[2] // 2], cmap='gray')
-        plt.title("Threshold-Enhanced MRI Slice")
+        plt.title('Threshold-Enhanced MRI Slice')
         plt.axis('off')
         plt.show()
 
-    return parent_dir + '/' + os.path.basename(parent_dir) + '-thresholded.nii.gz'
+    return output_image_name
