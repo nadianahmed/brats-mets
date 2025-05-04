@@ -8,5 +8,5 @@ LABEL_NAME = 'seg'
 CHOSEN_SCAN_TYPE = 't1c'
 
 # Image Thresholding
-THRESHOLD=250
+THRESHOLD=0.25
 SCALE=1.0

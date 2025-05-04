@@ -22,11 +22,12 @@ def extract_data():
     label_paths = []
     scan_names = []
     for sample in os.listdir(extracted_data_folder):
-        sample_folder_path = os.path.join(extracted_data_folder, sample)
+        if "BraTS" in sample:
+            sample_folder_path = os.path.join(extracted_data_folder, sample)
 
-        scan_names.append(sample)
-        scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.CHOSEN_SCAN_TYPE + '.nii.gz')
-        label_paths.append(sample_folder_path + '/' + sample + '-' + constants.LABEL_NAME + '.nii.gz')
+            scan_names.append(sample)
+            scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.CHOSEN_SCAN_TYPE + '.nii.gz')
+            label_paths.append(sample_folder_path + '/' + sample + '-' + constants.LABEL_NAME + '.nii.gz')
 
     result['scan_name'] = scan_names
     result['scan_path'] = scan_paths

@@ -5,5 +5,6 @@ from Pre_Processing.image_analysis import apply_threshold_contrast
 data = extract_data()
 
 # Apply thresholding to all images.
-apply_threshold_contrast(data.loc[data['scan_name'] == 'BraTS-MET-00002-000', 'scan_path'].values[0], save=True)
+data['thresholded_scan_path'] = data.apply(lambda row: apply_threshold_contrast(row['scan_path']), axis=1)
 
+print(data['thresholded_scan_path'][0])
