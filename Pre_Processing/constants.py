@@ -11,3 +11,7 @@ PRE_PROCESSED_IMAGE_SUFFIX = 'processed'
 # Image Thresholding
 THRESHOLD=1 # The percentage of bright pixels to keep.
 SCALE=1.0
+
+# Template Match
+TUMOUR_SIZE = 10
+TEMPLATE_MATCH_THRESHOLD = 0.6

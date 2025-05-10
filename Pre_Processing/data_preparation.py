@@ -9,7 +9,7 @@ def extract_data():
     Extracts the data from the zip file and returns a numpy of the relevant paths.
 
     Returns:
-    - data (Dataframe) of the relevant paths.
+    - pd.Dataframe: a table of the relevant paths.
     '''
     extracted_data_folder = constants.ROOT_FOLDER + '/' + constants.DATASET_FOLDER + constants.EXTRACTED_FOLDER_NAME
     if not os.path.isdir(extracted_data_folder):

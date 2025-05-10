@@ -1,12 +1,12 @@
-import os
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.feature import match_template
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, maximum_filter, label, center_of_mass
 
 import Pre_Processing.constants as constants
 from Helpers.scrollable_scan_viewer import ScrollableScanViewer
+from Helpers.file_helper import get_image_name_from_path, get_image_parent_path
 
 def load_image(filename):
     '''
@@ -16,11 +16,10 @@ def load_image(filename):
     - filename(String): the path to the file.
 
     Returns:
-    - img(Image): the loaded image.
-    - volume(ndarray): the contents of the image.
+    - nib.Nifti1Image: the loaded image.
     '''
     img = nib.load(filename)
-    return img, img.get_fdata()
+    return img
     
 def save_image(img, filename):
     '''
@@ -31,11 +30,10 @@ def save_image(img, filename):
     - filename(String): the name of the image file to save.
 
     Returns:
-    - path(String): the path to the saved image.
+    - String: the path to the saved image.
     '''
-    parent_dir = os.path.dirname(filename)
-    output_image_name = '{}/{}-{}.nii.gz'.format(parent_dir, 
-                                                 os.path.basename(parent_dir), 
+    output_image_name = '{}/{}-{}.nii.gz'.format(get_image_parent_path(path=filename), 
+                                                 get_image_name_from_path(path=filename), 
                                                  constants.PRE_PROCESSED_IMAGE_SUFFIX)
     nib.save(img, output_image_name)
 
@@ -46,16 +44,16 @@ def normalize_image(img):
     Normalizes the input image using the z-score method.
 
     Parameters:
-    - img(Image): the input image
+    - img(ndarray): the input image
 
     Returns:
-    - img(Image): the output image after applying the zscore method.
+    - np.ndarray: the output image after applying the zscore method.
     '''
     mean = np.mean(img)
     std = np.std(img)
     return (img - mean) / std
     
-def apply_threshold_contrast(img, volume, threshold=constants.THRESHOLD, scale=constants.SCALE, display_image=False):
+def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants.SCALE, display_image=False):
     '''
     Applies thresholding to the given image.
 
@@ -66,26 +64,109 @@ def apply_threshold_contrast(img, volume, threshold=constants.THRESHOLD, scale=c
     - display_image(Bool): whether the final image should be displayed using matplotlib or not.
 
     Returns:
-    - result(Image): the output image.
+    - nib.Nifti1Image: the output image.
     '''
-    # Normalizing the image.
+    # Get the contents of the image.
+    volume = img.get_fdata()
+
+    # Normalize the image.
     normalized_img = normalize_image(volume)
 
-    # Applying the threshold.
+    # Apply the threshold.
     enhanced = np.copy(volume)
     threshold = np.percentile(normalized_img, 100 - threshold)
     enhanced[normalized_img <= threshold] = 0
     enhanced *= scale
 
-    # Clipping the output to the correct range.
+    # Clip the output to the correct range.
     enhanced_data = np.clip(enhanced, 0, np.max(enhanced))
 
-    # Generating the output image.
-    enhanced_img = nib.Nifti1Image(enhanced_data, img.affine, img.header)
+    # Generate the output image.
+    output_img = nib.Nifti1Image(enhanced_data, img.affine, img.header)
 
-    # Displaying the output image.
+    # Display the output image.
     if display_image:
-        ScrollableScanViewer(enhanced_data, title="Thresholded Image", axis=2)
+        ScrollableScanViewer(enhanced_data, title="Thresholded Image")
         plt.show()
 
-    return enhanced_img
+    return output_img
+
+def create_spherical_template(radius):
+    '''
+    Create a 3D spherecial template with the given radius.
+
+    Parameters:
+    - radius (int): Radius of the sphere in voxels.
+
+    Returns:
+    - np.ndarray: 3D binary spherical template.
+    '''
+    shape = (2 * radius + 1,) * 3
+    zz, yy, xx = np.indices(shape)
+    center = np.array(shape) // 2
+    distance = np.sqrt((zz - center[0])**2 + (yy - center[1])**2 + (xx - center[2])**2)
+    sphere = (distance <= radius).astype(np.float32)
+    return gaussian_filter(sphere, sigma=1)
+
+def apply_template_matching(img, radius=constants.TUMOUR_SIZE, display_image=False):
+    '''
+    Applies thresholding to the given image.
+
+    Parameters:
+    - img(Image): the input image.
+    - radius(Int): the radius of the template to match.
+
+    Returns:
+    - nib.Nifti1Image: the output image.
+    - [(Int, Int, Int)]: a list of the possible template matches.
+    '''
+    # Get the contents of the image.
+    volume = img.get_fdata()
+
+    # Generate a spherical template.
+    template = create_spherical_template(radius=radius)
+    if template.shape[0] > volume.shape[0] or \
+       template.shape[1] > volume.shape[1] or \
+       template.shape[2] > volume.shape[2]:
+        raise ValueError("Template must be smaller than the volume in all dimensions.")
+    
+    # Find correlations to the template.
+    correlation = match_template(volume, template, pad_input=True)
+
+    # Find matches based on the correlations.
+    local_max = maximum_filter(correlation, size=template.shape) == correlation
+    threshold = constants.TEMPLATE_MATCH_THRESHOLD * np.max(correlation)
+    detected_peaks = (correlation > threshold) & local_max
+    labeled, num_features = label(detected_peaks)
+    match_coords_list = center_of_mass(detected_peaks, labeled, range(1, num_features + 1))
+    match_coords_list = [tuple(map(int, coords)) for coords in match_coords_list]
+
+    # Display the matches.
+    if display_image:
+        ScrollableScanViewer(volume=volume, title="Template Matched Image", match_coords=match_coords_list)
+        plt.show()
+
+    masked = np.zeros_like(volume)
+
+    # Only keep the matches.
+    for x, y, z in match_coords_list:
+        # Define bounding box for sphere
+        z_min = max(z - radius, 0)
+        z_max = min(z + radius + 1, volume.shape[0])
+        y_min = max(y - radius, 0)
+        y_max = min(y + radius + 1, volume.shape[1])
+        x_min = max(x - radius, 0)
+        x_max = min(x + radius + 1, volume.shape[2])
+
+        xx, yy, zz = np.ogrid[x_min:x_max, y_min:y_max, z_min:z_max]
+        dist = np.sqrt((zz - z)**2 + (yy - y)**2 + (xx - x)**2)
+        mask = dist <= radius
+
+        # Apply spherical mask to copy values
+        masked[x_min:x_max, y_min:y_max, z_min:z_max][mask] = \
+            volume[x_min:x_max, y_min:y_max, z_min:z_max][mask]
+        
+    # Generate the output image.
+    output_img = nib.Nifti1Image(masked, img.affine, img.header)
+
+    return output_img, match_coords_list
