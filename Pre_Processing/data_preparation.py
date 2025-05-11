@@ -22,7 +22,7 @@ def extract_data():
     label_paths = []
     scan_names = []
     for sample in os.listdir(extracted_data_folder):
-        if "BraTS" in sample:
+        if constants.PROJECT_NAME_PREFIX in sample:
             sample_folder_path = os.path.join(extracted_data_folder, sample)
 
             scan_names.append(sample)

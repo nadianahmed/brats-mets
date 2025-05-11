@@ -39,12 +39,25 @@ def save_image(img, filename):
 
     return output_image_name
 
+def display_image(img, title, match_coords=None, axis=2):
+    '''
+    Displays the current scan using the scrollable viewer.
+
+    Parameters:
+    - img(np.ndarray): the image data to display.
+    - title(String): the title for the image.
+    - match_coords_list([(Int, Int, Int)]): the coordinates for the points to display (default=None).
+    - axis(Int): the orientation of the image.
+    '''
+    ScrollableScanViewer(img, title, match_coords=match_coords, axis=axis)
+    plt.show()
+    
 def normalize_image(img):
     '''
     Normalizes the input image using the z-score method.
 
     Parameters:
-    - img(ndarray): the input image
+    - img(np.ndarray): the input image
 
     Returns:
     - np.ndarray: the output image after applying the zscore method.
@@ -53,7 +66,7 @@ def normalize_image(img):
     std = np.std(img)
     return (img - mean) / std
     
-def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants.SCALE, display_image=False):
+def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants.SCALE, show_image=False):
     '''
     Applies thresholding to the given image.
 
@@ -61,7 +74,7 @@ def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants
     - img(Image): the input image.
     - threshold(Int): the threshold used on the brightness of the image.
     - scale(Int): the scale used to increase the brightness by.
-    - display_image(Bool): whether the final image should be displayed using matplotlib or not.
+    - show_image(Bool): whether the final image should be displayed using matplotlib or not.
 
     Returns:
     - nib.Nifti1Image: the output image.
@@ -85,9 +98,8 @@ def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants
     output_img = nib.Nifti1Image(enhanced_data, img.affine, img.header)
 
     # Display the output image.
-    if display_image:
-        ScrollableScanViewer(enhanced_data, title="Thresholded Image")
-        plt.show()
+    if show_image:
+        display_image(enhanced_data, title="Thresholded Image")
 
     return output_img
 
@@ -96,7 +108,7 @@ def create_spherical_template(radius):
     Create a 3D spherecial template with the given radius.
 
     Parameters:
-    - radius (int): Radius of the sphere in voxels.
+    - radius(Int): Radius of the sphere in voxels.
 
     Returns:
     - np.ndarray: 3D binary spherical template.
@@ -108,13 +120,14 @@ def create_spherical_template(radius):
     sphere = (distance <= radius).astype(np.float32)
     return gaussian_filter(sphere, sigma=1)
 
-def apply_template_matching(img, radius=constants.TUMOUR_SIZE, display_image=False):
+def apply_template_matching(img, radius=constants.TUMOUR_SIZE, show_image=False):
     '''
     Applies thresholding to the given image.
 
     Parameters:
     - img(Image): the input image.
-    - radius(Int): the radius of the template to match.
+    - radius(Int): the radius of the template to match in milimeters.
+    - show_image(Bool): whether the final image should be displayed using matplotlib or not.
 
     Returns:
     - nib.Nifti1Image: the output image.
@@ -123,8 +136,11 @@ def apply_template_matching(img, radius=constants.TUMOUR_SIZE, display_image=Fal
     # Get the contents of the image.
     volume = img.get_fdata()
 
+    # Converting milimeters to voxels.
+    radius_voxels = round(radius/(img.header.get_zooms()[0]))
+
     # Generate a spherical template.
-    template = create_spherical_template(radius=radius)
+    template = create_spherical_template(radius=radius_voxels)
     if template.shape[0] > volume.shape[0] or \
        template.shape[1] > volume.shape[1] or \
        template.shape[2] > volume.shape[2]:
@@ -142,25 +158,24 @@ def apply_template_matching(img, radius=constants.TUMOUR_SIZE, display_image=Fal
     match_coords_list = [tuple(map(int, coords)) for coords in match_coords_list]
 
     # Display the matches.
-    if display_image:
-        ScrollableScanViewer(volume=volume, title="Template Matched Image", match_coords=match_coords_list)
-        plt.show()
+    if show_image:
+        display_image(volume, title="Template Matched Image", match_coords=match_coords_list)
 
     masked = np.zeros_like(volume)
 
     # Only keep the matches.
     for x, y, z in match_coords_list:
         # Define bounding box for sphere
-        z_min = max(z - radius, 0)
-        z_max = min(z + radius + 1, volume.shape[0])
-        y_min = max(y - radius, 0)
-        y_max = min(y + radius + 1, volume.shape[1])
-        x_min = max(x - radius, 0)
-        x_max = min(x + radius + 1, volume.shape[2])
+        z_min = max(z - radius_voxels, 0)
+        z_max = min(z + radius_voxels + 1, volume.shape[0])
+        y_min = max(y - radius_voxels, 0)
+        y_max = min(y + radius_voxels + 1, volume.shape[1])
+        x_min = max(x - radius_voxels, 0)
+        x_max = min(x + radius_voxels + 1, volume.shape[2])
 
         xx, yy, zz = np.ogrid[x_min:x_max, y_min:y_max, z_min:z_max]
         dist = np.sqrt((zz - z)**2 + (yy - y)**2 + (xx - x)**2)
-        mask = dist <= radius
+        mask = dist <= radius_voxels
 
         # Apply spherical mask to copy values
         masked[x_min:x_max, y_min:y_max, z_min:z_max][mask] = \
