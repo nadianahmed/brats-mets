@@ -18,7 +18,11 @@ def extract_data():
 
     result = pd.DataFrame()
 
-    scan_paths = []
+    t1c_scan_paths = []
+    t1n_scan_paths = []
+    t2f_scan_paths = []
+    t2w_scan_paths = []
+
     label_paths = []
     scan_names = []
     for sample in os.listdir(extracted_data_folder):
@@ -26,11 +30,17 @@ def extract_data():
             sample_folder_path = os.path.join(extracted_data_folder, sample)
 
             scan_names.append(sample)
-            scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.CHOSEN_SCAN_TYPE + '.nii.gz')
+            t1c_scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.T1C_SCAN_TYPE + '.nii.gz')
+            t1n_scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.T1N_SCAN_TYPE + '.nii.gz')
+            t2f_scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.T2F_SCAN_TYPE + '.nii.gz')
+            t2w_scan_paths.append(sample_folder_path + '/' + sample + '-' + constants.T2W_SCAN_TYPE + '.nii.gz')
             label_paths.append(sample_folder_path + '/' + sample + '-' + constants.LABEL_NAME + '.nii.gz')
 
     result['scan_name'] = scan_names
-    result['scan_path'] = scan_paths
+    result['t1c_path'] = t1c_scan_paths
+    result['t1n_path'] = t1n_scan_paths
+    result['t2f_path'] = t2f_scan_paths
+    result['t2w_path'] = t2w_scan_paths
     result['label_path'] = label_paths
 
     return result

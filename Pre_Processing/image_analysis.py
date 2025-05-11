@@ -21,20 +21,22 @@ def load_image(filename):
     img = nib.load(filename)
     return img
     
-def save_image(img, filename):
+def save_image(img, filename, scan_type):
     '''
     Saves the given image into the given filename.
 
     Parameters:
     - img(Image): the iamge to save.
     - filename(String): the name of the image file to save.
+    - scan_type(String): the type of scan.
 
     Returns:
     - String: the path to the saved image.
     '''
-    output_image_name = '{}/{}-{}.nii.gz'.format(get_image_parent_path(path=filename), 
-                                                 get_image_name_from_path(path=filename), 
-                                                 constants.PRE_PROCESSED_IMAGE_SUFFIX)
+    output_image_name = '{}/{}-{}-{}.nii.gz'.format(get_image_parent_path(path=filename), 
+                                                    get_image_name_from_path(path=filename), 
+                                                    scan_type,
+                                                    constants.PRE_PROCESSED_IMAGE_SUFFIX)
     nib.save(img, output_image_name)
 
     return output_image_name
@@ -66,19 +68,31 @@ def normalize_image(img):
     std = np.std(img)
     return (img - mean) / std
     
-def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants.SCALE, show_image=False):
+def apply_threshold_contrast(img, scan_type, show_image=False):
     '''
     Applies thresholding to the given image.
 
     Parameters:
     - img(Image): the input image.
-    - threshold(Int): the threshold used on the brightness of the image.
-    - scale(Int): the scale used to increase the brightness by.
+    - scan_type(String): the type of scan.
     - show_image(Bool): whether the final image should be displayed using matplotlib or not.
 
     Returns:
     - nib.Nifti1Image: the output image.
     '''
+    if scan_type == constants.T1C_SCAN_TYPE:
+        threshold_percentile = constants.T1C_THRESHOLD_PERCENTILE
+        scale = constants.T1C_SCALE
+    elif scan_type == constants.T1N_SCAN_TYPE:
+        threshold_percentile = constants.T1N_THRESHOLD_PERCENTILE
+        scale = constants.T1N_SCALE
+    elif scan_type == constants.T2F_SCAN_TYPE:
+        threshold_percentile = constants.T2F_THRESHOLD_PERCENTILE
+        scale = constants.T2F_SCALE
+    else:
+        threshold_percentile = constants.T2W_THRESHOLD_PERCENTILE
+        scale = constants.T2W_SCALE
+
     # Get the contents of the image.
     volume = img.get_fdata()
 
@@ -87,7 +101,7 @@ def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants
 
     # Apply the threshold.
     enhanced = np.copy(volume)
-    threshold = np.percentile(normalized_img, 100 - threshold)
+    threshold = np.percentile(normalized_img, (1 - threshold_percentile) * 100)
     enhanced[normalized_img <= threshold] = 0
     enhanced *= scale
 
@@ -99,7 +113,7 @@ def apply_threshold_contrast(img, threshold=constants.THRESHOLD, scale=constants
 
     # Display the output image.
     if show_image:
-        display_image(enhanced_data, title="Thresholded Image")
+        display_image(enhanced_data, title="Thresholded scan of type {}".format(scan_type))
 
     return output_img
 
@@ -120,19 +134,32 @@ def create_spherical_template(radius):
     sphere = (distance <= radius).astype(np.float32)
     return gaussian_filter(sphere, sigma=1)
 
-def apply_template_matching(img, radius=constants.TUMOUR_SIZE, show_image=False):
+def apply_template_matching(img, scan_type, show_image=False):
     '''
     Applies thresholding to the given image.
 
     Parameters:
     - img(Image): the input image.
-    - radius(Int): the radius of the template to match in milimeters.
+    - scan_type(String): the type of scan.
     - show_image(Bool): whether the final image should be displayed using matplotlib or not.
 
     Returns:
     - nib.Nifti1Image: the output image.
     - [(Int, Int, Int)]: a list of the possible template matches.
     '''
+    if scan_type == constants.T1C_SCAN_TYPE:
+        radius = constants.T1C_TUMOUR_SIZE
+        threshold = constants.T1C_TEMPLATE_MATCH_THRESHOLD
+    elif scan_type == constants.T1N_SCAN_TYPE:
+        radius = constants.T1N_TUMOUR_SIZE
+        threshold = constants.T1N_TEMPLATE_MATCH_THRESHOLD
+    elif scan_type == constants.T2F_SCAN_TYPE:
+        radius = constants.T2F_TUMOUR_SIZE
+        threshold = constants.T2F_TEMPLATE_MATCH_THRESHOLD
+    else:
+        radius = constants.T2W_TUMOUR_SIZE
+        threshold = constants.T2W_TEMPLATE_MATCH_THRESHOLD
+    
     # Get the contents of the image.
     volume = img.get_fdata()
 
@@ -151,15 +178,15 @@ def apply_template_matching(img, radius=constants.TUMOUR_SIZE, show_image=False)
 
     # Find matches based on the correlations.
     local_max = maximum_filter(correlation, size=template.shape) == correlation
-    threshold = constants.TEMPLATE_MATCH_THRESHOLD * np.max(correlation)
-    detected_peaks = (correlation > threshold) & local_max
+    correlation_threshold = threshold * np.max(correlation)
+    detected_peaks = (correlation > correlation_threshold) & local_max
     labeled, num_features = label(detected_peaks)
     match_coords_list = center_of_mass(detected_peaks, labeled, range(1, num_features + 1))
     match_coords_list = [tuple(map(int, coords)) for coords in match_coords_list]
 
     # Display the matches.
     if show_image:
-        display_image(volume, title="Template Matched Image", match_coords=match_coords_list)
+        display_image(volume, title="Template matched scan of type {}".format(scan_type), match_coords=match_coords_list)
 
     masked = np.zeros_like(volume)
 
