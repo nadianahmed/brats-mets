@@ -1,6 +1,5 @@
 import os
 
-
 def get_image_parent_path(path):
     '''
     Returns the parent path for the image.

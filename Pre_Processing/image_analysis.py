@@ -1,6 +1,5 @@
 import nibabel as nib
 import numpy as np
-import matplotlib.pyplot as plt
 from skimage.feature import match_template
 from scipy.ndimage import gaussian_filter, maximum_filter, label, center_of_mass
 
@@ -52,8 +51,7 @@ def display_image(img, title, match_coords=None, axis=2):
     - axis(Int): the orientation of the image.
     '''
     ScrollableScanViewer(img, title, match_coords=match_coords, axis=axis)
-    plt.show()
-    
+
 def normalize_image(img):
     '''
     Normalizes the input image using the z-score method.
