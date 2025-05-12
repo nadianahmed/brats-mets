@@ -34,7 +34,6 @@ def apply_img_processing(filename, scan_type, show_image=False):
 
     if show_image:
         display_image(template_matched_image.get_fdata(), title="Final processed scan of type {}".format(scan_type))
-        plt.show()
 
     processed_img_path = save_image(template_matched_image, filename=filename, scan_type=scan_type)
     return processed_img_path
@@ -58,3 +57,5 @@ else:
         data[data['scan_name'] == CHOSEN_TEST_SAMPLE].apply(lambda row: apply_img_processing(row['t2f_path'], scan_type=SCAN_TYPE, show_image=True), axis=1)
     else:
         print("DON'T USE THESE SCAN TYPES")
+
+plt.show()
