@@ -40,18 +40,6 @@ def save_image(img, filename, scan_type):
 
     return output_image_name
 
-def display_image(img, title, match_coords=None, axis=2):
-    '''
-    Displays the current scan using the scrollable viewer.
-
-    Parameters:
-    - img(np.ndarray): the image data to display.
-    - title(String): the title for the image.
-    - match_coords_list([(Int, Int, Int)]): the coordinates for the points to display (default=None).
-    - axis(Int): the orientation of the image.
-    '''
-    ScrollableScanViewer(img, title, match_coords=match_coords, axis=axis)
-
 def normalize_image(img):
     '''
     Normalizes the input image using the z-score method.
@@ -111,7 +99,7 @@ def apply_threshold_contrast(img, scan_type, show_image=False):
 
     # Display the output image.
     if show_image:
-        display_image(enhanced_data, title="Thresholded scan of type {}".format(scan_type))
+        ScrollableScanViewer(enhanced_data, title="Thresholded scan of type {}".format(scan_type))
 
     return output_img
 
@@ -184,7 +172,8 @@ def apply_template_matching(img, scan_type, show_image=False):
 
     # Display the matches.
     if show_image:
-        display_image(volume, title="Template matched scan of type {}".format(scan_type), match_coords=match_coords_list)
+        ScrollableScanViewer(volume, title="Template matched scan of type {}".format(scan_type),
+                             match_coords=match_coords_list)
 
     masked = np.zeros_like(volume)
 

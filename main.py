@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
 
 from Pre_Processing.data_preparation import extract_data
-from Pre_Processing.image_analysis import load_image, apply_threshold_contrast, apply_template_matching, save_image, display_image
+from Pre_Processing.image_analysis import load_image, apply_threshold_contrast, apply_template_matching, save_image
 import Pre_Processing.constants as constants
 
 from Helpers.file_helper import get_image_name_from_path
+from Helpers.scrollable_scan_viewer import ScrollableScanViewer
 
 RUN_ALL = False
 CHOSEN_TEST_SAMPLE = 'BraTS-MET-00002-000'
@@ -24,7 +25,7 @@ def apply_img_processing(filename, scan_type, show_image=False):
     '''
     img = load_image(filename=filename)
     if show_image:
-        display_image(img.get_fdata(), title="Original scan of type {}".format(scan_type))
+        ScrollableScanViewer(img.get_fdata(), title="Original scan of type {}".format(scan_type))
     
     thresholded_img = apply_threshold_contrast(img=img, scan_type=scan_type, show_image=show_image)
     template_matched_image, match_coords_list = apply_template_matching(img=thresholded_img, scan_type=scan_type, show_image=show_image)
@@ -33,7 +34,8 @@ def apply_img_processing(filename, scan_type, show_image=False):
                                                                     match_coords_list))
 
     if show_image:
-        display_image(template_matched_image.get_fdata(), title="Final processed scan of type {}".format(scan_type))
+        ScrollableScanViewer(template_matched_image.get_fdata(), 
+                             title="Final processed scan of type {}".format(scan_type))
 
     processed_img_path = save_image(template_matched_image, filename=filename, scan_type=scan_type)
     return processed_img_path

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import numpy as np
 
-def ScrollableScanViewer(volume, title, match_coords, axis):
+def ScrollableScanViewer(volume, title, match_coords=None, axis=2):
     '''
     View the 3D MRI scan with a slider.
 
