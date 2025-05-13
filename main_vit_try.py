@@ -87,7 +87,6 @@ def evaluate_vit(model, dataloader, mask_paths):
     print(f"Precision: {np.mean(precisions):.4f}")
 
 # Load Evaluation Data
-# Example: Using the same T1C for evaluation (split this properly in practice)
 eval_loader = prepare_data(t1c_paths, scan_type)
 evaluate_vit(trained_model, eval_loader, mask_paths)
 
