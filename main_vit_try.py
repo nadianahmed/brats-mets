@@ -70,6 +70,7 @@ class VisionTransformer3D(nn.Module):
         return x
 
 # Load Data
+df = extract_data()
 dataset = T1cMRI_Dataset(df[['t1c_path', 'label_path']])
 dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
 
