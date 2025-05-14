@@ -1,7 +1,7 @@
 import os
 import torch
 import matplotlib.pyplot as plt
-from Main_Vi_T_Training_And_Evaluation_3D_ViT import ViT3D, prepare_data_3d
+from Pre_Processing.Attention_Mask import ViT3D, prepare_data_3d
 from Pre_Processing.data_preparation import extract_data
 import numpy as np
 
