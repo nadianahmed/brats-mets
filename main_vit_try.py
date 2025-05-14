@@ -19,9 +19,9 @@ t1c_paths = data['t1c_path'].tolist()
 mask_paths = data['label_path'].tolist()  # Ground truth segmentation masks
 scan_type = constants.T1C_SCAN_TYPE
 
-# Prepare DataLoader with Automatic Thresholding
-train_loader = prepare_data(t1c_paths, mask_paths)
-eval_loader = prepare_data(t1c_paths, mask_paths)
+# Prepare DataLoader with Efficient Thresholded Mask and Slice Sampling
+train_loader = prepare_data(t1c_paths, mask_paths, max_slices=20)
+eval_loader = prepare_data(t1c_paths, mask_paths, max_slices=20)
 
 # Initialize Vision Transformer with Attention Mask
 model = ViTWithAttention(use_attention_mask=True).to(device)
