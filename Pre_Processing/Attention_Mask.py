@@ -43,22 +43,22 @@ class MRIDataset(Dataset):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        img = load_image(self.img_paths[idx])
-        thresholded_img = apply_threshold_contrast(img, self.scan_type)
-        volume = thresholded_img.get_fdata()
-
-        # Sample Slices (Efficient Memory Use)
-        num_slices = min(self.max_slices, volume.shape[0])
-        selected_slices = np.linspace(0, volume.shape[0] - 1, num_slices).astype(int)
-        slices = [volume[i, :, :] for i in selected_slices]
-
-        # Convert slices to tensor
-        slices = np.stack(slices, axis=0)
-
+        img = load_image(self.img_paths[idx]).get_fdata()  # (D, H, W)
+        num_slices = img.shape[0]
+    
+        # Randomly sample slices (up to max_slices)
+        selected_slices = np.random.choice(num_slices, min(self.max_slices, num_slices), replace=False)
+        slices = [img[i, :, :] for i in selected_slices]  # List of 2D slices
+    
+        # Convert each 2D slice to 3-channel (RGB-like)
+        slices = [np.stack([slice, slice, slice], axis=0) for slice in slices]  # (3, H, W) for each slice
+        slices = np.stack(slices, axis=0)  # (D, 3, H, W)
+    
         if self.transform:
-            slices = self.transform(slices)
+            slices = self.transform(torch.tensor(slices))
+    
+        return slices.float()
 
-        return torch.tensor(slices, dtype=torch.float32)
 
 # Prepare DataLoader
 def prepare_data(img_paths, mask_paths=None, scan_type=None, max_slices=20):
