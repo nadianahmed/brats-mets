@@ -16,15 +16,15 @@ print(data.columns)
 t1c_paths = data['t1c_path'].tolist()
 mask_paths = data['label_path'].tolist()  # Ground truth segmentation masks
 
-# Prepare DataLoader for 3D ViT
+# Prepare DataLoader for 3D ViT (Optimized)
 train_loader = prepare_data_3d(t1c_paths, mask_paths)
 eval_loader = prepare_data_3d(t1c_paths, mask_paths)
 
 # Initialize 3D Vision Transformer
 model = ViT3D().to(device)
 
-# Train and Evaluate the Model
-print("Training and Evaluating 3D Vision Transformer...")
+# Optimized Training with AMP
+scaler = torch.cuda.amp.GradScaler()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 criterion = torch.nn.CrossEntropyLoss()
 
@@ -34,10 +34,14 @@ for epoch in range(10):
     for batch_idx, (imgs, masks) in enumerate(train_loader):
         imgs, masks = imgs.to(device), masks.to(device)
         optimizer.zero_grad()
-        outputs = model(imgs)
-        loss = criterion(outputs, masks)
-        loss.backward()
-        optimizer.step()
+
+        with torch.cuda.amp.autocast():
+            outputs = model(imgs)
+            loss = criterion(outputs, masks)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
         if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
