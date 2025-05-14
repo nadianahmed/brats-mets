@@ -102,3 +102,53 @@ for epoch in range(10):
         epoch_loss += loss.item()
 
     print(f"Epoch [{epoch + 1}/10], Loss: {epoch_loss / len(dataloader):.4f}")
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Visualization Function
+def visualize_predictions(images, labels, predictions, slice_idx=80):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    # Display Input Image
+    axes[0].imshow(images[0, 0, :, :, slice_idx].cpu(), cmap='gray')
+    axes[0].set_title("Input MRI Image")
+
+    # Display Ground Truth Mask
+    axes[1].imshow(labels[0, :, :, slice_idx].cpu(), cmap='viridis')
+    axes[1].set_title("Ground Truth Mask")
+
+    # Display Predicted Mask
+    axes[2].imshow(predictions[0, :, :, slice_idx].cpu(), cmap='viridis')
+    axes[2].set_title("Predicted Mask")
+
+    plt.show()
+
+# Evaluation Scheme
+model.eval()
+all_dice_scores = []
+with torch.no_grad():
+    for images, labels in dataloader:
+        images, labels = images.to(device), labels.to(device)
+        outputs = model(images)
+        outputs = F.interpolate(outputs, size=labels.shape[1:], mode='trilinear', align_corners=False)
+        predicted = torch.argmax(outputs, dim=1)
+
+        # Dice Score Calculation
+        for cls in range(4):
+            intersection = (predicted == cls) * (labels == cls)
+            dice_score = (2 * intersection.sum()) / (predicted.eq(cls).sum() + labels.eq(cls).sum() + 1e-5)
+            all_dice_scores.append(dice_score.item())
+
+        # Visualization
+        visualize_predictions(images, labels, predicted)
+
+# Average Dice Score per Class
+dice_per_class = np.mean(np.array(all_dice_scores).reshape(-1, 4), axis=0)
+for cls, dice in enumerate(dice_per_class):
+    print(f"Dice Score for Class {cls}: {dice:.4f}")
+
