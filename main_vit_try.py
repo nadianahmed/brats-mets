@@ -1,8 +1,7 @@
 import os
 import torch
 import matplotlib.pyplot as plt
-from Pre_Processing.Attention_Mask import ViTWithAttention, prepare_data, train_and_evaluate_vit
-import Pre_Processing.constants as constants
+from Main_Vi_T_Training_And_Evaluation_3D_ViT import ViT3D, prepare_data_3d
 from Pre_Processing.data_preparation import extract_data
 import numpy as np
 
@@ -16,20 +15,38 @@ data = extract_data()  # This should be your DataFrame with scan paths
 print(data.columns)
 t1c_paths = data['t1c_path'].tolist()
 mask_paths = data['label_path'].tolist()  # Ground truth segmentation masks
-scan_type = constants.T1C_SCAN_TYPE
 
-# Prepare DataLoader with Thresholded Mask
-train_loader = prepare_data(t1c_paths, mask_paths, scan_type=scan_type, max_slices=20)
-eval_loader = prepare_data(t1c_paths, mask_paths, scan_type=scan_type, max_slices=20)
+# Prepare DataLoader for 3D ViT
+train_loader = prepare_data_3d(t1c_paths, mask_paths)
+eval_loader = prepare_data_3d(t1c_paths, mask_paths)
 
-# Initialize Vision Transformer with Attention Mask
-model = ViTWithAttention(use_attention_mask=True).to(device)
+# Initialize 3D Vision Transformer
+model = ViT3D().to(device)
 
 # Train and Evaluate the Model
-print("Training and Evaluating Vision Transformer with Thresholded Attention Mask...")
-trained_model = train_and_evaluate_vit(model, train_loader, eval_loader, epochs=10, lr=1e-4)
+print("Training and Evaluating 3D Vision Transformer...")
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+criterion = torch.nn.CrossEntropyLoss()
+
+for epoch in range(10):
+    model.train()
+    total_loss = 0.0
+    for batch_idx, (imgs, masks) in enumerate(train_loader):
+        imgs, masks = imgs.to(device), masks.to(device)
+        optimizer.zero_grad()
+        outputs = model(imgs)
+        loss = criterion(outputs, masks)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
+            print(f"Epoch [{epoch+1}/10], Step [{batch_idx+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
+
+    avg_loss = total_loss / len(train_loader)
+    print(f"Epoch [{epoch+1}/10] Completed - Average Loss: {avg_loss:.4f}")
 
 # Save the Trained Model
-model_save_path = "trained_vit_thresholded_attention.pth"
-torch.save(trained_model.state_dict(), model_save_path)
+model_save_path = "trained_3d_vit.pth"
+torch.save(model.state_dict(), model_save_path)
 print(f"Model saved to {model_save_path}")
