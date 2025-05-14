@@ -51,7 +51,7 @@ class MRIDataset3D(Dataset):
 # Prepare DataLoader for 3D ViT
 def prepare_data_3d(img_paths, mask_paths=None):
     transform = T.Compose([
-        T.Resize((64, 128, 128)),  # Resize to (D, H, W)
+        T.Lambda(lambda x: torch.nn.functional.interpolate(x.unsqueeze(0), size=(64, 128, 128), mode='trilinear', align_corners=False).squeeze(0))
         T.Normalize(mean=0.5, std=0.5)
     ])
     dataset = MRIDataset3D(img_paths, mask_paths=mask_paths, transform=transform)
