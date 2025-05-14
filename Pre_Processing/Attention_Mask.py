@@ -67,7 +67,7 @@ def prepare_data(img_paths, mask_paths=None):
         T.Resize((224, 224)),  # Required for ViT
     ])
     dataset = MRIDataset(img_paths, mask_paths=mask_paths, transform=transform)
-    loader = DataLoader(dataset, batch_size=8, shuffle=True)
+    loader = DataLoader(dataset, batch_size=2, shuffle=True)
     return loader
 
 # Train and Evaluate Function
