@@ -23,7 +23,7 @@ class ViT3D(nn.Module):
         x = x.flatten(2).permute(0, 2, 1)  # (B, D*H*W, embed_dim)
         x += self.position_embedding[:, :x.size(1), :]  # Positional encoding
         x = self.transformer(x)  # (B, D*H*W, embed_dim)
-        x = x.permute(0, 2, 1).view(x.size(0), -1, 8, 8, 8)  # Reshape back
+        x = x.permute(0, 2, 1).contiguous().reshape(x.size(0), -1, 8, 8, 8)
         x = self.conv_segmentation(x)  # (B, num_classes, D/4, H/4, W/4)
         return x
 
