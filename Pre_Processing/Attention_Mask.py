@@ -1,5 +1,5 @@
 import os
-import torch
+import torch.nn as nn
 import matplotlib.pyplot as plt
 from Pre_Processing.data_preparation import extract_data
 from Pre_Processing.image_analysis import load_image, apply_threshold_contrast, save_image
