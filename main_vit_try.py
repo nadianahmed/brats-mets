@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
-from scipy.ndimage import gaussian_filter, maximum_filter, label, center_of_mass
 import torchvision.transforms as transforms
 import numpy as np
 import nibabel as nib
 import pandas as pd
+import matplotlib.pyplot as plt
 
 class T1cMRI_Dataset(Dataset):
     def __init__(self, dataframe, transform=None, use_thresholding=True):
@@ -27,7 +27,7 @@ class T1cMRI_Dataset(Dataset):
 
         # Apply Thresholding if enabled
         if self.use_thresholding:
-            t1c_image = self.apply_thresholding(t1c_image)
+            t1c_image = self.apply_threshold_contrast(t1c_image)
 
         # Convert to PyTorch tensor (2 channels: MRI + Thresholded Image)
         t1c_image = torch.tensor(t1c_image, dtype=torch.float32)  # (2, D, H, W)
@@ -38,11 +38,22 @@ class T1cMRI_Dataset(Dataset):
 
         return t1c_image, label
 
-    def apply_thresholding(self, image):
-        normalized_img = (image - np.mean(image)) / np.std(image)
-        threshold = np.percentile(normalized_img, 99)
-        thresholded = (normalized_img > threshold).astype(np.float32)
-        return np.stack([image, thresholded])  # (2, D, H, W)
+    def apply_threshold_contrast(self, volume, threshold_percentile=0.01, scale=1.0):
+        '''Applies thresholding using contrast scaling.'''
+        # Normalize the image
+        normalized_img = (volume - np.mean(volume)) / np.std(volume)
+
+        # Apply the threshold
+        enhanced = np.copy(volume)
+        threshold = np.percentile(normalized_img, (1 - threshold_percentile) * 100)
+        enhanced[normalized_img <= threshold] = 0
+        enhanced *= scale
+
+        # Clip to valid range
+        enhanced_data = np.clip(enhanced, 0, np.max(enhanced))
+
+        # Return thresholded mask as second channel
+        return np.stack([volume, enhanced_data])  # (2, D, H, W)
 
 class VisionTransformer3D(nn.Module):
     def __init__(self, img_size=(240, 240, 155), patch_size=(16, 16, 16), in_channels=2, num_classes=4, embed_dim=768, num_heads=12, depth=12):
@@ -71,8 +82,27 @@ class VisionTransformer3D(nn.Module):
 
 # Load Data
 df = extract_data()
-dataset = T1cMRI_Dataset(df[['t1c_path', 'label_path']])
+dataset = T1cMRI_Dataset(df[['t1c_path', 'label_path']], use_thresholding=True)
 dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
+
+# Display Sample Images
+for images, labels in dataloader:
+    print("Image Shape:", images.shape)
+    print("Label Shape:", labels.shape)
+
+    # Display MRI and Thresholded Image
+    plt.figure(figsize=(15,5))
+    plt.subplot(1,2,1)
+    plt.imshow(images[0, 0, :, :, images.shape[-1]//2].cpu(), cmap='gray')
+    plt.title("MRI Image")
+
+    plt.subplot(1,2,2)
+    plt.imshow(images[0, 1, :, :, images.shape[-1]//2].cpu(), cmap='gray')
+    plt.title("Thresholded Image")
+
+    plt.show()
+
+    break
 
 # Initialize Model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,53 +132,3 @@ for epoch in range(10):
         epoch_loss += loss.item()
 
     print(f"Epoch [{epoch + 1}/10], Loss: {epoch_loss / len(dataloader):.4f}")
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Visualization Function
-def visualize_predictions(images, labels, predictions, slice_idx=80):
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-    # Display Input Image
-    axes[0].imshow(images[0, 0, :, :, slice_idx].cpu(), cmap='gray')
-    axes[0].set_title("Input MRI Image")
-
-    # Display Ground Truth Mask
-    axes[1].imshow(labels[0, :, :, slice_idx].cpu(), cmap='viridis')
-    axes[1].set_title("Ground Truth Mask")
-
-    # Display Predicted Mask
-    axes[2].imshow(predictions[0, :, :, slice_idx].cpu(), cmap='viridis')
-    axes[2].set_title("Predicted Mask")
-
-    plt.show()
-
-# Evaluation Scheme
-model.eval()
-all_dice_scores = []
-with torch.no_grad():
-    for images, labels in dataloader:
-        images, labels = images.to(device), labels.to(device)
-        outputs = model(images)
-        outputs = F.interpolate(outputs, size=labels.shape[1:], mode='trilinear', align_corners=False)
-        predicted = torch.argmax(outputs, dim=1)
-
-        # Dice Score Calculation
-        for cls in range(4):
-            intersection = (predicted == cls) * (labels == cls)
-            dice_score = (2 * intersection.sum()) / (predicted.eq(cls).sum() + labels.eq(cls).sum() + 1e-5)
-            all_dice_scores.append(dice_score.item())
-
-        # Visualization
-        visualize_predictions(images, labels, predicted)
-
-# Average Dice Score per Class
-dice_per_class = np.mean(np.array(all_dice_scores).reshape(-1, 4), axis=0)
-for cls, dice in enumerate(dice_per_class):
-    print(f"Dice Score for Class {cls}: {dice:.4f}")
-
