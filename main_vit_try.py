@@ -37,6 +37,7 @@ for epoch in range(10):
 
         with torch.cuda.amp.autocast():
             outputs = model(imgs)
+            masks = torch.nn.functional.interpolate(masks.unsqueeze(1).float(), size=outputs.shape[2:], mode='nearest').squeeze(1).long()
             loss = criterion(outputs, masks)
 
         scaler.scale(loss).backward()
@@ -44,8 +45,6 @@ for epoch in range(10):
         scaler.update()
 
         total_loss += loss.item()
-        if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_loader):
-            print(f"Epoch [{epoch+1}/10], Step [{batch_idx+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
 
     avg_loss = total_loss / len(train_loader)
     print(f"Epoch [{epoch+1}/10] Completed - Average Loss: {avg_loss:.4f}")
