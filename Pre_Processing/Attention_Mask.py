@@ -37,16 +37,17 @@ class MRIDataset3D(Dataset):
     def __getitem__(self, idx):
         img = nib.load(self.img_paths[idx]).get_fdata()  # (D, H, W)
         img = np.expand_dims(img, axis=0)  # (1, D, H, W)
-
+    
         if self.transform:
             img = self.transform(torch.tensor(img, dtype=torch.float32))
-
+    
         if self.mask_paths:
             mask = nib.load(self.mask_paths[idx]).get_fdata()
-            mask = np.any(mask > 0).astype(np.float32)  # Binary classification (Tumor/No Tumor)
+            mask = np.any(mask > 0).astype(np.int64)  # Binary classification (Tumor/No Tumor)
             return img, torch.tensor(mask, dtype=torch.long)
         else:
             return img
+
 
 # Prepare DataLoader for 3D ViT
 def prepare_data_3d(img_paths, mask_paths=None):
