@@ -1,11 +1,14 @@
+import os
 import torch
-import torch.nn as nn
-import torchvision.transforms as T
-from torchvision.models import vit_b_16
-import nibabel as nib
-import numpy as np
 import matplotlib.pyplot as plt
+from Pre_Processing.data_preparation import extract_data
+from Pre_Processing.image_analysis import load_image, apply_threshold_contrast, save_image
+import Pre_Processing.constants as constants
+from sklearn.metrics import confusion_matrix
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
+from torchvision.models import vit_b_16
+import torchvision.transforms as T
 
 # Vision Transformer Setup (Using Pretrained ViT)
 class ViTWithAttention(nn.Module):
@@ -15,66 +18,95 @@ class ViTWithAttention(nn.Module):
         self.use_attention_mask = use_attention_mask
 
         # Replace the final classification head for binary classification
-        in_features = self.vit.heads[0].in_features  # Access the in_features of the final layer
+        in_features = self.vit.heads[0].in_features
         self.vit.heads = nn.Sequential(
             nn.Linear(in_features, 2)  # Binary Classification (Tumor / Non-Tumor)
         )
 
     def forward(self, x, attention_mask=None):
         if self.use_attention_mask and attention_mask is not None:
-            x = x * attention_mask  # Apply attention mask
+            x = x * attention_mask
         x = self.vit(x)
         return x
 
-# Custom Dataset for Loading MRI Scans (Efficient Thresholded Mask)
+# Custom Dataset with Thresholded Mask
 class MRIDataset(Dataset):
-    def __init__(self, img_paths, mask_paths=None, transform=None, threshold=0.2, max_slices=20):
+    def __init__(self, img_paths, mask_paths=None, scan_type=None, transform=None, max_slices=20):
         self.img_paths = img_paths
         self.mask_paths = mask_paths
+        self.scan_type = scan_type
         self.transform = transform
-        self.threshold = threshold
         self.max_slices = max_slices
 
     def __len__(self):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        # Load MRI image (3D Volume)
-        img = nib.load(self.img_paths[idx]).get_fdata()  # (D, H, W)
-        num_slices = img.shape[0]
+        img = load_image(self.img_paths[idx])
+        thresholded_img = apply_threshold_contrast(img, self.scan_type)
+        volume = thresholded_img.get_fdata()
 
-        # Randomly sample slices (up to max_slices)
-        selected_slices = np.random.choice(num_slices, min(self.max_slices, num_slices), replace=False)
-        slices = [img[i, :, :] for i in selected_slices]
+        # Sample Slices (Efficient Memory Use)
+        num_slices = min(self.max_slices, volume.shape[0])
+        selected_slices = np.linspace(0, volume.shape[0] - 1, num_slices).astype(int)
+        slices = [volume[i, :, :] for i in selected_slices]
 
-        # Generate Attention Mask using Thresholding
-        attention_masks = [(s > np.percentile(s, 80)).astype(np.float32) for s in slices]
-
-        # Load Ground Truth Mask (3D) only for selected slices
-        if self.mask_paths:
-            mask = nib.load(self.mask_paths[idx]).get_fdata()
-            mask_slices = [mask[i, :, :] for i in selected_slices]
-        else:
-            mask_slices = [np.zeros_like(s) for s in slices]
-
-        # Convert slices to tensors
+        # Convert slices to tensor
         slices = np.stack(slices, axis=0)
-        mask_slices = np.stack(mask_slices, axis=0)
-        attention_masks = np.stack(attention_masks, axis=0)
 
         if self.transform:
             slices = self.transform(slices)
-            mask_slices = self.transform(mask_slices)
-            attention_masks = self.transform(attention_masks)
 
-        return torch.tensor(slices, dtype=torch.float32), torch.tensor(mask_slices, dtype=torch.float32), torch.tensor(attention_masks, dtype=torch.float32)
+        return torch.tensor(slices, dtype=torch.float32)
 
-# Prepare DataLoader Function
-def prepare_data(img_paths, mask_paths=None, max_slices=20):
+# Prepare DataLoader
+def prepare_data(img_paths, mask_paths=None, scan_type=None, max_slices=20):
     transform = T.Compose([
         T.ToTensor(),
-        T.Resize((224, 224)),  # Required for ViT
+        T.Resize((224, 224))
     ])
-    dataset = MRIDataset(img_paths, mask_paths=mask_paths, transform=transform, max_slices=max_slices)
-    loader = DataLoader(dataset, batch_size=4, shuffle=True, pin_memory=True, num_workers=4)
+    dataset = MRIDataset(img_paths, mask_paths=mask_paths, scan_type=scan_type, transform=transform, max_slices=max_slices)
+    loader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=4)
     return loader
+
+# Load Dataset Paths
+data = extract_data()
+t1c_paths = data['t1c_path'].tolist()
+mask_paths = data['label_path'].tolist()
+
+# Prepare DataLoader with Thresholded Mask
+train_loader = prepare_data(t1c_paths, mask_paths, scan_type=constants.T1C_SCAN_TYPE)
+
+# Initialize Model
+model = ViTWithAttention(use_attention_mask=True).to('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Train and Evaluate Function
+def train_and_evaluate_vit(model, train_loader, epochs=10, lr=1e-4):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(epochs):
+        model.train()
+        for imgs in train_loader:
+            imgs = imgs.to(device)
+            optimizer.zero_grad()
+
+            # Generate attention mask dynamically
+            attn_mask = (imgs > 0).float()  # Thresholded attention mask
+            outputs = model(imgs, attention_mask=attn_mask)
+
+            loss = criterion(outputs, torch.zeros(outputs.size(0), dtype=torch.long).to(device))
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+
+    return model
+
+# Train and Save Model
+print("Training Vision Transformer with Thresholded Attention Mask...")
+trained_model = train_and_evaluate_vit(model, train_loader, epochs=10, lr=1e-4)
+torch.save(trained_model.state_dict(), "trained_vit_thresholded.pth")
+print("Model saved as 'trained_vit_thresholded.pth'")
