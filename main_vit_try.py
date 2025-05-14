@@ -1,7 +1,7 @@
 import os
 import torch
 import matplotlib.pyplot as plt
-from Main_ViT_Training_and_Evaluation_Thresholded_Mask import ViTWithAttention, prepare_data, train_and_evaluate_vit
+from Pre_Processing.Attention_Mask import ViTWithAttention, prepare_data, train_and_evaluate_vit
 import Pre_Processing.constants as constants
 from Pre_Processing.data_preparation import extract_data
 import numpy as np
