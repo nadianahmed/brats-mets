@@ -8,16 +8,6 @@ import nibabel as nib
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
-import torchvision.transforms as transforms
-import numpy as np
-import nibabel as nib
-import pandas as pd
-import matplotlib.pyplot as plt
-
 class T1cMRI_Dataset(Dataset):
     def __init__(self, dataframe, transform=None, use_thresholding=True):
         self.dataframe = dataframe
@@ -59,79 +49,34 @@ class T1cMRI_Dataset(Dataset):
         attention_mask = (enhanced > 0).astype(np.float32)
         return enhanced, attention_mask
 
-class VisionTransformer3D(nn.Module):
-    def __init__(self, img_size=(240, 240, 155), patch_size=(16, 16, 16), in_channels=1, num_classes=4, embed_dim=768):
-        super(VisionTransformer3D, self).__init__()
-        self.patch_embed = nn.Conv3d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-        self.fc = nn.Conv3d(embed_dim, num_classes, kernel_size=1)
+class AttentionGatedUNet3D(nn.Module):
+    def __init__(self, in_channels=1, out_channels=4, features=[16, 32, 64, 128]):
+        super(AttentionGatedUNet3D, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv3d(in_channels, features[0], kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv3d(features[0], features[1], kernel_size=3, padding=1),
+            nn.ReLU()
+        )
+
+        self.attention_gate = nn.Sequential(
+            nn.Conv3d(features[1], features[1], kernel_size=3, padding=1),
+            nn.Sigmoid()
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Conv3d(features[1], out_channels, kernel_size=3, padding=1)
+        )
 
     def forward(self, x, attention_mask):
-        B, C, D, H, W = x.shape
-        x = self.patch_embed(x)
-        D_new, H_new, W_new = x.shape[2], x.shape[3], x.shape[4]
-        x = x.view(B, 768, D_new, H_new, W_new)
+        x = self.encoder(x)
 
-        # Apply attention (Masked)
-        x = self.masked_attention(x, x, x, attention_mask)
-        x = self.fc(x)
+        # Apply attention mask as spatial gate
+        gated_x = x * attention_mask
+        gated_x = self.attention_gate(gated_x)
 
+        x = self.decoder(gated_x)
         return x
-
-    def masked_attention(self, Q, K, V, attention_mask, eps=1e-8):
-        scale = Q.size(-1) ** 0.5
-        attn_scores = (Q @ K.transpose(-2, -1)) / (scale + eps)
-        B, _, D, H, W = attention_mask.shape
-
-        # Flatten the attention mask to match the number of patches
-        attention_mask = attention_mask.view(B, -1)
-
-        # Ensure it matches the shape of the attention scores
-        attention_mask = attention_mask.unsqueeze(1).repeat(1, attn_scores.size(1), 1)
-
-        # Adjust shape to align with attention scores
-        attn_scores = attn_scores * attention_mask
-
-
-        attn_scores = torch.clamp(attn_scores, min=-50, max=50)
-        attn_probs = F.softmax(attn_scores, dim=-1)
-        output = attn_probs @ V
-        return output
-
-
-# Gradient Clipping Function
-def clip_gradients(model):
-    for name, param in model.named_parameters():
-        if param.grad is not None:
-            torch.nn.utils.clip_grad_norm_(param, max_norm=1.0)
-
-# Evaluation and Visualization
-def visualize_results(model, dataloader, device):
-    model.eval()
-    with torch.no_grad():
-        for images, masks, labels in dataloader:
-            images, masks, labels = images.to(device), masks.to(device), labels.to(device)
-            outputs = model(images, masks)
-
-            plt.figure(figsize=(24, 5))
-            plt.subplot(1, 4, 1)
-            plt.imshow(images[0, 0, :, :, images.shape[-1] // 2].cpu(), cmap='gray')
-            plt.title("Input MRI Image")
-
-            plt.subplot(1, 4, 2)
-            plt.imshow(masks[0, 0, :, :, images.shape[-1] // 2].cpu(), cmap='gray')
-            plt.title("Threshold Mask (Attention)")
-
-            plt.subplot(1, 4, 3)
-            plt.imshow(labels[0, :, :, images.shape[-1] // 2].cpu(), cmap='inferno')
-            plt.title("Ground Truth Mask")
-
-            plt.subplot(1, 4, 4)
-            plt.imshow(outputs[0, 0, :, :, images.shape[-1] // 2].cpu().argmax(dim=0), cmap='inferno')
-            plt.title("Predicted Mask")
-
-            plt.show()
-            break
 
 import torch
 import torch.nn as nn
@@ -141,13 +86,15 @@ import pandas as pd
 
 # Load Data
 train_dataset = T1cMRI_Dataset(df[['t1c_path', 'label_path']], use_thresholding=True)
-train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
+train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
 
 # Initialize Model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = VisionTransformer3D().to(device)
+model = AttentionGatedUNet3D(in_channels=1, out_channels=4).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+scaler = torch.cuda.amp.GradScaler()
 
 # Training Loop
 num_epochs = 10
@@ -159,19 +106,19 @@ for epoch in range(num_epochs):
         images, masks, labels = images.to(device), masks.to(device), labels.to(device)
 
         optimizer.zero_grad()
-        outputs = model(images, masks)
+        with torch.cuda.amp.autocast():
+            outputs = model(images, masks)
+            loss = criterion(outputs, labels)
 
-        # Resizing output to match label size
-        outputs = nn.functional.interpolate(outputs, size=labels.shape[1:], mode='trilinear', align_corners=False)
-
-        loss = criterion(outputs, labels)
-        loss.backward()
-        clip_gradients(model)
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
 
-    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {total_loss/len(train_dataloader):.4f}")
+    avg_loss = total_loss / len(train_dataloader)
+    scheduler.step(avg_loss)
+    print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}")
 
 # Evaluation
 def evaluate_model(model, dataloader, device):
@@ -184,11 +131,7 @@ def evaluate_model(model, dataloader, device):
             images, masks, labels = images.to(device), masks.to(device), labels.to(device)
             outputs = model(images, masks)
 
-            # Resize outputs
-            outputs = nn.functional.interpolate(outputs, size=labels.shape[1:], mode='trilinear', align_corners=False)
             preds = torch.argmax(outputs, dim=1)
-
-            # Calculate Dice Score
             intersection = (preds * labels).sum(dim=(1, 2, 3))
             union = preds.sum(dim=(1, 2, 3)) + labels.sum(dim=(1, 2, 3))
             dice_score = (2. * intersection) / (union + 1e-6)
@@ -198,3 +141,6 @@ def evaluate_model(model, dataloader, device):
 
     avg_dice = total_dice_score / total_samples
     print(f"Average Dice Score: {avg_dice:.4f}")
+
+# Example Usage
+evaluate_model(model, train_dataloader, device)
