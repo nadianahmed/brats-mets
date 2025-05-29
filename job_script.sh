@@ -6,9 +6,6 @@
 #SBATCH --time=0-04:00:00
 #SBATCH --output=Huda-%j.out
 
-module load python/3.10
-source ~/ENV/bin/activate
-
 cd /project/def-sreeram/hsheikh1/brats-mets || exit 1
 
 python -u test_unet.py
