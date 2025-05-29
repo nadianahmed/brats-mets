@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --account=def-sreeram
-#SBATCH --gres=gpu:p100:1
+#SBATCH --gres=gpu:a100:1                   # Updated GPU type
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64000M
 #SBATCH --time=0-04:00:00
-#SBATCH --output=Huda-%j.out   # Use %j = job ID, not array indices
+#SBATCH --output=Huda-%j.out                # Use %j = job ID, not array indices
 
 echo ">> Loading Python module..."
 module load python/3.10
