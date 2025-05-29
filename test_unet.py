@@ -65,7 +65,7 @@ def extract_data():
     Returns:
     - pd.DataFrame: a table of the relevant paths.
     """
-    extracted_data_folder = '/project/6067967/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'
+    extracted_data_folder = '/project/def-sreeram/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'
 
     if not os.path.isdir(extracted_data_folder):
         raise FileNotFoundError(f"Expected folder not found: {extracted_data_folder} Make sure dataset is extracted.")
