@@ -6,6 +6,6 @@
 #SBATCH --time=0-04:00:00
 #SBATCH --output=Huda-%j.out
 
-cd /projects/def-sreeram/hsheikh1/brats-mets || exit 1
+cd /project/def-sreeram/hsheikh1/brats-mets || exit 1
 
 python -u test_unet.py
