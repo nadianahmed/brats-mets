@@ -217,6 +217,119 @@ class BRATSMetsDataset(Dataset):
         return sample
 
 # Insert the fixed AttentionBlock3D and AttentionUNet3D classes here (use my corrected versions from above).
+class AttentionBlock3D(nn.Module):
+    def __init__(self, F_g, F_l, F_int):
+        super(AttentionBlock3D, self).__init__()
+        self.W_g = nn.Sequential(nn.Conv3d(F_g, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
+        self.W_x = nn.Sequential(nn.Conv3d(F_l, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
+        self.psi = nn.Sequential(nn.Conv3d(F_int + 1, 1, kernel_size=1), nn.BatchNorm3d(1), nn.Sigmoid())
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, g, x, template_map):
+        g1 = self.W_g(g)
+        x1 = self.W_x(x)
+
+        # Crop x1 to match g1
+        if x1.shape[2:] != g1.shape[2:]:
+            diffD = x1.size(2) - g1.size(2)
+            diffH = x1.size(3) - g1.size(3)
+            diffW = x1.size(4) - g1.size(4)
+            x1 = x1[:, :, diffD//2:diffD//2 + g1.size(2),
+                         diffH//2:diffH//2 + g1.size(3),
+                         diffW//2:diffW//2 + g1.size(4)]
+
+        psi = self.relu(g1 + x1)
+
+        # Resize template_map to match psi
+        if template_map.shape[2:] != psi.shape[2:]:
+            template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
+
+        psi = torch.cat([psi, template_map], dim=1)
+        psi = self.psi(psi)
+
+        # Crop psi to match x before multiplication
+        if psi.shape[2:] != x.shape[2:]:
+            diffD = psi.size(2) - x.size(2)
+            diffH = psi.size(3) - x.size(3)
+            diffW = psi.size(4) - x.size(4)
+            psi = psi[:, :, diffD//2:diffD//2 + x.size(2),
+                           diffH//2:diffH//2 + x.size(3),
+                           diffW//2:diffW//2 + x.size(4)]
+
+        return x * psi
+
+class AttentionUNet3D(nn.Module):
+    def __init__(self, in_channels=1, out_channels=2, features=[32, 64, 128, 256]):
+        super(AttentionUNet3D, self).__init__()
+        self.encoder1 = self._block(in_channels, features[0])
+        self.pool1 = nn.MaxPool3d(2)
+        self.encoder2 = self._block(features[0], features[1])
+        self.pool2 = nn.MaxPool3d(2)
+        self.encoder3 = self._block(features[1], features[2])
+        self.pool3 = nn.MaxPool3d(2)
+        self.bottleneck = self._block(features[2], features[3])
+        self.upconv3 = nn.ConvTranspose3d(features[3], features[2], kernel_size=2, stride=2)
+        self.att3 = AttentionBlock3D(features[2], features[2], features[1])
+        self.decoder3 = self._block(features[3], features[2])
+        self.upconv2 = nn.ConvTranspose3d(features[2], features[1], kernel_size=2, stride=2)
+        self.att2 = AttentionBlock3D(features[1], features[1], features[0])
+        self.decoder2 = self._block(features[2], features[1])
+        self.upconv1 = nn.ConvTranspose3d(features[1], features[0], kernel_size=2, stride=2)
+        self.att1 = AttentionBlock3D(features[0], features[0], features[0]//2)
+        self.decoder1 = self._block(features[1], features[0])
+        self.conv_out = nn.Conv3d(features[0], out_channels, kernel_size=1)
+
+    def _block(self, in_channels, out_channels):
+        return nn.Sequential(
+            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, t1c_input, template_map):
+        enc1 = self.encoder1(t1c_input)
+        enc2 = self.encoder2(self.pool1(enc1))
+        enc3 = self.encoder3(self.pool2(enc2))
+        bottleneck = self.bottleneck(self.pool3(enc3))
+
+        dec3 = self.upconv3(bottleneck)
+        enc3 = self.att3(g=dec3, x=enc3, template_map=template_map)
+        if enc3.shape[2:] != dec3.shape[2:]:
+            diffD = enc3.size(2) - dec3.size(2)
+            diffH = enc3.size(3) - dec3.size(3)
+            diffW = enc3.size(4) - dec3.size(4)
+            enc3 = enc3[:, :, diffD//2:diffD//2 + dec3.size(2),
+                             diffH//2:diffH//2 + dec3.size(3),
+                             diffW//2:diffW//2 + dec3.size(4)]
+        dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
+
+        dec2 = self.upconv2(dec3)
+        enc2 = self.att2(g=dec2, x=enc2, template_map=template_map)
+        if enc2.shape[2:] != dec2.shape[2:]:
+            diffD = enc2.size(2) - dec2.size(2)
+            diffH = enc2.size(3) - dec2.size(3)
+            diffW = enc2.size(4) - dec2.size(4)
+            enc2 = enc2[:, :, diffD//2:diffD//2 + dec2.size(2),
+                             diffH//2:diffH//2 + dec2.size(3),
+                             diffW//2:diffW//2 + dec2.size(4)]
+        dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
+
+        dec1 = self.upconv1(dec2)
+        enc1 = self.att1(g=dec1, x=enc1, template_map=template_map)
+        if enc1.shape[2:] != dec1.shape[2:]:
+            diffD = enc1.size(2) - dec1.size(2)
+            diffH = enc1.size(3) - dec1.size(3)
+            diffW = enc1.size(4) - dec1.size(4)
+            enc1 = enc1[:, :, diffD//2:diffD//2 + dec1.size(2),
+                             diffH//2:diffH//2 + dec1.size(3),
+                             diffW//2:diffW//2 + dec1.size(4)]
+        dec1 = self.decoder1(torch.cat((dec1, enc1), dim=1))
+
+        return self.conv_out(dec1)
+
 
 # Training function and main script remain unchanged.
 
