@@ -49,7 +49,7 @@ T2F_TEMPLATE_MATCH_THRESHOLD = 0.6
 T2W_TUMOUR_SIZE = 10 # Measured in milimeters
 T2W_TEMPLATE_MATCH_THRESHOLD = 0.6
 
-APPLY_PRE_PROCESSING = False
+APPLY_PRE_PROCESSING = True
 
 """###data preparation"""
 
