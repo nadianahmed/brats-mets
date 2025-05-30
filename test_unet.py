@@ -142,7 +142,8 @@ def apply_img_processing(filename, scan_type, show_image=False):
     img = load_image(filename=filename)
     thresholded_img = apply_threshold_contrast(img=img, scan_type=scan_type)
     template_matched_image, _ = apply_template_matching(thresholded_img, scan_type)
-    return save_image(template_matched_image, filename, scan_type)
+    output_path = save_image(template_matched_image, filename, scan_type)
+    return output_path 
 
 def extract_data():
     extracted_data_folder = DATASET_FOLDER
