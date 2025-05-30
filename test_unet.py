@@ -174,12 +174,18 @@ def extract_data():
     result['label_path'] = label_paths
 
     if APPLY_PRE_PROCESSING:
-        result['t1c_processed_scan_path'] = result.apply(
+        print("\n🧪 Testing apply_img_processing return format...\n")
+        paths = result.apply(
             lambda row: apply_img_processing(row['t1c_path'], scan_type=T1C_SCAN_TYPE), axis=1)
+
+        print("Returned type:", type(paths))
+        print("Sample output:")
+        print(paths.head())  # 👈 this is crucial
+
+        result['t1c_processed_scan_path'] = paths  # Only assign if it's valid
     else:
         result['t1c_processed_scan_path'] = preprocessed_paths
 
-    return result
 
 class BRATSMetsDataset(Dataset):
     def __init__(self, dataframe, transform=None):
