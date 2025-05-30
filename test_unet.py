@@ -234,28 +234,38 @@ class AttentionBlock3D(nn.Module):
         self.psi = nn.Sequential(nn.Conv3d(F_int + 1, 1, kernel_size=1), nn.BatchNorm3d(1), nn.Sigmoid())
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, g, x, template_map):
-        g1 = self.W_g(g)
-        x1 = self.W_x(x)
-    
-        # Crop x1 to match g1 if needed
-        if x1.shape != g1.shape:
-            diffD = x1.size(2) - g1.size(2)
-            diffH = x1.size(3) - g1.size(3)
-            diffW = x1.size(4) - g1.size(4)
-            x1 = x1[:, :, diffD//2 : diffD//2 + g1.size(2),
-                        diffH//2 : diffH//2 + g1.size(3),
-                        diffW//2 : diffW//2 + g1.size(4)]
-    
-        psi = self.relu(g1 + x1)
-    
-        # Resize template map to match psi shape
-        if template_map.shape[2:] != psi.shape[2:]:
-            template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
-    
-        psi = torch.cat([psi, template_map], dim=1)
-        psi = self.psi(psi)
-        return x * psi
+def forward(self, g, x, template_map):
+    g1 = self.W_g(g)
+    x1 = self.W_x(x)
+
+    # Crop x1 to match g1
+    if x1.shape != g1.shape:
+        diffD = x1.size(2) - g1.size(2)
+        diffH = x1.size(3) - g1.size(3)
+        diffW = x1.size(4) - g1.size(4)
+        x1 = x1[:, :, diffD//2 : diffD//2 + g1.size(2),
+                    diffH//2 : diffH//2 + g1.size(3),
+                    diffW//2 : diffW//2 + g1.size(4)]
+
+    psi = self.relu(g1 + x1)
+
+    # Interpolate template_map to match psi
+    if template_map.shape[2:] != psi.shape[2:]:
+        template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
+
+    psi = torch.cat([psi, template_map], dim=1)
+    psi = self.psi(psi)
+
+    # 🔥 Crop psi to match x before multiplying
+    if psi.shape != x.shape:
+        diffD = psi.size(2) - x.size(2)
+        diffH = psi.size(3) - x.size(3)
+        diffW = psi.size(4) - x.size(4)
+        psi = psi[:, :, diffD//2 : diffD//2 + x.size(2),
+                       diffH//2 : diffH//2 + x.size(3),
+                       diffW//2 : diffW//2 + x.size(4)]
+
+    return x * psi
 
 
 class AttentionUNet3D(nn.Module):
