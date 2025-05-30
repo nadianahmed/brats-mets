@@ -143,6 +143,7 @@ def apply_img_processing(filename, scan_type, show_image=False):
     thresholded_img = apply_threshold_contrast(img=img, scan_type=scan_type)
     template_matched_image, _ = apply_template_matching(thresholded_img, scan_type)
     output_path = save_image(template_matched_image, filename, scan_type)
+    print(output_path)
     return output_path 
 
 def extract_data():
