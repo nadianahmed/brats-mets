@@ -3,16 +3,12 @@
 """brats-mets_UNet_v2.py
 
 This script handles pre-processing and training a 3D Attention U-Net on the BraTS-MET dataset.
-
 """
 
 import os
-import zipfile
 import pandas as pd
 import nibabel as nib
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 from skimage.feature import match_template
 from scipy.ndimage import gaussian_filter, maximum_filter, label, center_of_mass
 import torch
@@ -67,10 +63,10 @@ def load_image(filename):
     return nib.load(filename)
 
 def save_image(img, filename, scan_type):
-    output_image_name = '{}/{}-{}-{}.nii.gz'.format(get_image_parent_path(path=filename),
-                                                    get_image_name_from_path(path=filename),
-                                                    scan_type,
-                                                    PRE_PROCESSED_IMAGE_SUFFIX)
+    output_image_name = '{}/{}-{}-{}.nii'.format(get_image_parent_path(path=filename),
+                                                 get_image_name_from_path(path=filename),
+                                                 scan_type,
+                                                 PRE_PROCESSED_IMAGE_SUFFIX)
     nib.save(img, output_image_name)
     return output_image_name
 
@@ -138,7 +134,7 @@ def apply_template_matching(img, scan_type, show_image=False):
         xx, yy, zz = np.ogrid[x_min:x_max, y_min:y_max, z_min:z_max]
         dist = np.sqrt((zz - z)**2 + (yy - y)**2 + (xx - x)**2)
         mask = dist <= radius_voxels
-        masked[x_min:x_max, y_min:y_max, z_min:z_max][mask] =             volume[x_min:x_max, y_min:y_max, z_min:z_max][mask]
+        masked[x_min:x_max, y_min:y_max, z_min:z_max][mask] = volume[x_min:x_max, y_min:y_max, z_min:z_max][mask]
 
     return nib.Nifti1Image(masked, img.affine, img.header), match_coords_list
 
@@ -159,17 +155,13 @@ def extract_data():
     for sample in os.listdir(extracted_data_folder):
         path = os.path.join(extracted_data_folder, sample)
         if os.path.isdir(path) and PROJECT_NAME_PREFIX in sample:
-            scan_base = os.path.basename(path)  # e.g., "BraTS-MET-00002-000"
+            scan_base = os.path.basename(path)
             scan_names.append(scan_base)
-
-            # Update extensions to .nii instead of .nii.gz
             t1c_scan_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}.nii"))
             t1n_scan_paths.append(os.path.join(path, f"{scan_base}-{T1N_SCAN_TYPE}.nii"))
             t2f_scan_paths.append(os.path.join(path, f"{scan_base}-{T2F_SCAN_TYPE}.nii"))
             t2w_scan_paths.append(os.path.join(path, f"{scan_base}-{T2W_SCAN_TYPE}.nii"))
             label_paths.append(os.path.join(path, f"{scan_base}-{LABEL_NAME}.nii"))
-
-            # Save output as .nii to match format unless you're saving .nii.gz
             preprocessed_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}-{PRE_PROCESSED_IMAGE_SUFFIX}.nii"))
 
     result['scan_name'] = scan_names
@@ -187,87 +179,71 @@ def extract_data():
 
     return result
 
+class BRATSMetsDataset(Dataset):
+    def __init__(self, dataframe, transform=None):
+        self.dataframe = dataframe
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        row = self.dataframe.iloc[idx]
+        t1c_img = nib.load(row['t1c_path']).get_fdata()
+        t1c_img = np.expand_dims(t1c_img, axis=0)
+        attn_mask = nib.load(row['t1c_processed_scan_path']).get_fdata()
+        attn_mask = np.expand_dims(attn_mask, axis=0)
+        seg = nib.load(row['label_path']).get_fdata()
+        seg = np.expand_dims(seg, axis=0)
+        t1c_img = (t1c_img - np.min(t1c_img)) / (np.max(t1c_img) - np.min(t1c_img) + 1e-5)
+        attn_mask = (attn_mask - np.min(attn_mask)) / (np.max(attn_mask) - np.min(attn_mask) + 1e-5)
+        sample = {
+            'image': torch.tensor(t1c_img, dtype=torch.float32),
+            'attention': torch.tensor(attn_mask, dtype=torch.float32),
+            'label': torch.tensor(seg, dtype=torch.long)
+        }
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
 class AttentionBlock3D(nn.Module):
     def __init__(self, F_g, F_l, F_int):
         super(AttentionBlock3D, self).__init__()
-        self.W_g = nn.Sequential(
-            nn.Conv3d(F_g, F_int, kernel_size=1),
-            nn.BatchNorm3d(F_int)
-        )
-        self.W_x = nn.Sequential(
-            nn.Conv3d(F_l, F_int, kernel_size=1),
-            nn.BatchNorm3d(F_int)
-        )
-        self.psi = nn.Sequential(
-            nn.Conv3d(F_int + 1, 1, kernel_size=1),  # 1 extra channel for template map
-            nn.BatchNorm3d(1),
-            nn.Sigmoid()
-        )
+        self.W_g = nn.Sequential(nn.Conv3d(F_g, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
+        self.W_x = nn.Sequential(nn.Conv3d(F_l, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
+        self.psi = nn.Sequential(nn.Conv3d(F_int + 1, 1, kernel_size=1), nn.BatchNorm3d(1), nn.Sigmoid())
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, g, x, template_map):
         g1 = self.W_g(g)
         x1 = self.W_x(x)
         psi = self.relu(g1 + x1)
-
-        # Resize template_map to match psi shape and concatenate
         if template_map.shape[2:] != psi.shape[2:]:
             template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
         psi = torch.cat([psi, template_map], dim=1)
-
         psi = self.psi(psi)
         return x * psi
 
-
 class AttentionUNet3D(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, features=[32, 64, 128, 256]):
+    def __init__(self, in_channels=1, out_channels=2, features=[32, 64, 128, 256]):
         super(AttentionUNet3D, self).__init__()
-
         self.encoder1 = self._block(in_channels, features[0])
         self.pool1 = nn.MaxPool3d(2)
-
         self.encoder2 = self._block(features[0], features[1])
         self.pool2 = nn.MaxPool3d(2)
-
         self.encoder3 = self._block(features[1], features[2])
         self.pool3 = nn.MaxPool3d(2)
-
         self.bottleneck = self._block(features[2], features[3])
-
         self.upconv3 = nn.ConvTranspose3d(features[3], features[2], kernel_size=2, stride=2)
-        self.att3 = AttentionBlock3D(F_g=features[2], F_l=features[2], F_int=features[1])
+        self.att3 = AttentionBlock3D(features[2], features[2], features[1])
         self.decoder3 = self._block(features[3], features[2])
-
         self.upconv2 = nn.ConvTranspose3d(features[2], features[1], kernel_size=2, stride=2)
-        self.att2 = AttentionBlock3D(F_g=features[1], F_l=features[1], F_int=features[0])
+        self.att2 = AttentionBlock3D(features[1], features[1], features[0])
         self.decoder2 = self._block(features[2], features[1])
-
         self.upconv1 = nn.ConvTranspose3d(features[1], features[0], kernel_size=2, stride=2)
-        self.att1 = AttentionBlock3D(F_g=features[0], F_l=features[0], F_int=features[0]//2)
+        self.att1 = AttentionBlock3D(features[0], features[0], features[0]//2)
         self.decoder1 = self._block(features[1], features[0])
-
         self.conv_out = nn.Conv3d(features[0], out_channels, kernel_size=1)
-
-    def forward(self, t1c_input, template_map):
-        enc1 = self.encoder1(t1c_input)
-        enc2 = self.encoder2(self.pool1(enc1))
-        enc3 = self.encoder3(self.pool2(enc2))
-
-        bottleneck = self.bottleneck(self.pool3(enc3))
-
-        dec3 = self.upconv3(bottleneck)
-        enc3 = self.att3(g=dec3, x=enc3, template_map=template_map)
-        dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
-
-        dec2 = self.upconv2(dec3)
-        enc2 = self.att2(g=dec2, x=enc2, template_map=template_map)
-        dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
-
-        dec1 = self.upconv1(dec2)
-        enc1 = self.att1(g=dec1, x=enc1, template_map=template_map)
-        dec1 = self.decoder1(torch.cat((dec1, enc1), dim=1))
-
-        return self.conv_out(dec1)
 
     def _block(self, in_channels, out_channels):
         return nn.Sequential(
@@ -279,65 +255,42 @@ class AttentionUNet3D(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-class BRATSMetsDataset(Dataset):
-    def __init__(self, dataframe, transform=None):
-        """
-        Args:
-            dataframe (pd.DataFrame): Must contain columns 't1c_path', 't1c_processed_path', 'seg_path'
-            transform: Optional transform to be applied on a sample
-        """
-        self.dataframe = dataframe
-        self.transform = transform
+    def forward(self, t1c_input, template_map):
+        enc1 = self.encoder1(t1c_input)
+        enc2 = self.encoder2(self.pool1(enc1))
+        enc3 = self.encoder3(self.pool2(enc2))
+        bottleneck = self.bottleneck(self.pool3(enc3))
+        dec3 = self.upconv3(bottleneck)
+        enc3 = self.att3(dec3, enc3, template_map)
+        dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
+        dec2 = self.upconv2(dec3)
+        enc2 = self.att2(dec2, enc2, template_map)
+        dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
+        dec1 = self.upconv1(dec2)
+        enc1 = self.att1(dec1, enc1, template_map)
+        dec1 = self.decoder1(torch.cat((dec1, enc1), dim=1))
+        return self.conv_out(dec1)
 
-    def __len__(self):
-        return len(self.dataframe)
+def train_one_epoch(model, dataloader, criterion, optimizer, device):
+    model.train()
+    for batch in dataloader:
+        images = batch['image'].to(device)
+        attn = batch['attention'].to(device)
+        labels = batch['label'].to(device).squeeze(1)
+        outputs = model(images, attn)
+        loss = criterion(outputs, labels)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    print("Epoch complete. Loss: {:.4f}".format(loss.item()))
 
-    def __getitem__(self, idx):
-        row = self.dataframe.iloc[idx]
-
-        # Load T1C scan
-        t1c_img = nib.load(row['t1c_path']).get_fdata()
-        t1c_img = np.expand_dims(t1c_img, axis=0)  # Add channel dimension
-
-        # Load processed scan (attention mask)
-        attn_mask = nib.load(row['t1c_processed_scan_path']).get_fdata()
-        attn_mask = np.expand_dims(attn_mask, axis=0)
-
-        # Load segmentation label
-        seg = nib.load(row['label_path']).get_fdata()
-        seg = np.expand_dims(seg, axis=0)
-
-        # Normalize images
-        t1c_img = (t1c_img - np.min(t1c_img)) / (np.max(t1c_img) - np.min(t1c_img) + 1e-5)
-        attn_mask = (attn_mask - np.min(attn_mask)) / (np.max(attn_mask) - np.min(attn_mask) + 1e-5)
-
-        sample = {
-            'image': torch.tensor(t1c_img, dtype=torch.float32),
-            'attention': torch.tensor(attn_mask, dtype=torch.float32),
-            'label': torch.tensor(seg, dtype=torch.long)
-        }
-
-        if self.transform:
-            sample = self.transform(sample)
-
-        return sample
-
-data = extract_data()
-# Device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-# Instantiate model
-model = AttentionUNet3D(in_channels=1, out_channels=2).to(device)  # Assuming 2-class segmentation
-
-# Optimizer and Loss
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-criterion = torch.nn.CrossEntropyLoss()  # For multi-class segmentation
-
-# Create the dataset
-dataset = BRATSMetsDataset(dataframe=data)
-
-# DataLoader
-dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
-
-# Train for one epoch
-train_one_epoch(model, dataloader, criterion, optimizer, device)
+if __name__ == "__main__":
+    data = extract_data()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("Using device:", device)
+    model = AttentionUNet3D(in_channels=1, out_channels=2).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    criterion = torch.nn.CrossEntropyLoss()
+    dataset = BRATSMetsDataset(dataframe=data)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4)
+    train_one_epoch(model, dataloader, criterion, optimizer, device)
