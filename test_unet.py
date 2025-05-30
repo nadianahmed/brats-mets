@@ -156,7 +156,7 @@ def extract_data():
 
     for sample in os.listdir(extracted_data_folder):
         path = os.path.join(extracted_data_folder, sample)
-        if os.path.isdir(path) and sample.startswith("BraTS-MET-"):
+        if PROJECT_NAME_PREFIX in sample:
             print("✅ Subfolders found:", os.listdir(extracted_data_folder))
             scan_base = os.path.basename(path)
             scan_names.append(scan_base)
