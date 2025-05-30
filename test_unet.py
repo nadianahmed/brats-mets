@@ -237,12 +237,26 @@ class AttentionBlock3D(nn.Module):
     def forward(self, g, x, template_map):
         g1 = self.W_g(g)
         x1 = self.W_x(x)
+    
+        # Crop x1 to match g1 if needed
+        if x1.shape != g1.shape:
+            diffD = x1.size(2) - g1.size(2)
+            diffH = x1.size(3) - g1.size(3)
+            diffW = x1.size(4) - g1.size(4)
+            x1 = x1[:, :, diffD//2 : diffD//2 + g1.size(2),
+                        diffH//2 : diffH//2 + g1.size(3),
+                        diffW//2 : diffW//2 + g1.size(4)]
+    
         psi = self.relu(g1 + x1)
+    
+        # Resize template map to match psi shape
         if template_map.shape[2:] != psi.shape[2:]:
             template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
+    
         psi = torch.cat([psi, template_map], dim=1)
         psi = self.psi(psi)
         return x * psi
+
 
 class AttentionUNet3D(nn.Module):
     def __init__(self, in_channels=1, out_channels=2, features=[32, 64, 128, 256]):
