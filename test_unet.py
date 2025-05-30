@@ -18,7 +18,7 @@ import torch.optim as optim
 
 # Paths
 EXTRACTED_FOLDER_NAME = 'ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'
-DATASET_FOLDER = '/project/def-sreeram/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'  
+DATASET_FOLDER = '/project/def-sreeram/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'  
 LABEL_NAME = 'seg'
 T1C_SCAN_TYPE = 't1c'
 T1N_SCAN_TYPE = 't1n'
