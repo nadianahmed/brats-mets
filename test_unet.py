@@ -147,25 +147,38 @@ def apply_img_processing(filename, scan_type, show_image=False):
     return output_path 
 
 def extract_data():
-    extracted_data_folder = DATASET_FOLDER
+    '''
+    Scans the extracted dataset folder and returns a DataFrame with relevant image and label paths.
+
+    Returns:
+    - pd.DataFrame: table of relevant paths for scans and labels.
+    '''
+    extracted_data_folder = os.path.join(DATASET_FOLDER)  # Should already be unzipped manually
+
     if not os.path.isdir(extracted_data_folder):
-        raise FileNotFoundError(f"Expected folder not found: {extracted_data_folder}")
+        raise FileNotFoundError(f"❌ Folder not found: {extracted_data_folder}")
 
     result = pd.DataFrame()
-    scan_names, t1c_scan_paths, t1n_scan_paths, t2f_scan_paths, t2w_scan_paths, label_paths, preprocessed_paths = [], [], [], [], [], [], []
+
+    t1c_scan_paths = []
+    t1n_scan_paths = []
+    t2f_scan_paths = []
+    t2w_scan_paths = []
+    label_paths = []
+    preprocessed_paths = []
+    scan_names = []
 
     for sample in os.listdir(extracted_data_folder):
-        path = os.path.join(extracted_data_folder, sample)
         if PROJECT_NAME_PREFIX in sample:
-            print("✅ Subfolders found:", os.listdir(extracted_data_folder))
-            scan_base = os.path.basename(path)
-            scan_names.append(scan_base)
-            t1c_scan_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}.nii"))
-            t1n_scan_paths.append(os.path.join(path, f"{scan_base}-{T1N_SCAN_TYPE}.nii"))
-            t2f_scan_paths.append(os.path.join(path, f"{scan_base}-{T2F_SCAN_TYPE}.nii"))
-            t2w_scan_paths.append(os.path.join(path, f"{scan_base}-{T2W_SCAN_TYPE}.nii"))
-            label_paths.append(os.path.join(path, f"{scan_base}-{LABEL_NAME}.nii"))
-            preprocessed_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}-{PRE_PROCESSED_IMAGE_SUFFIX}.nii"))
+            sample_folder_path = os.path.join(extracted_data_folder, sample)
+
+            scan_names.append(sample)
+            t1c_scan_paths.append(os.path.join(sample_folder_path, f"{sample}-{T1C_SCAN_TYPE}.nii"))
+            t1n_scan_paths.append(os.path.join(sample_folder_path, f"{sample}-{T1N_SCAN_TYPE}.nii"))
+            t2f_scan_paths.append(os.path.join(sample_folder_path, f"{sample}-{T2F_SCAN_TYPE}.nii"))
+            t2w_scan_paths.append(os.path.join(sample_folder_path, f"{sample}-{T2W_SCAN_TYPE}.nii"))
+            label_paths.append(os.path.join(sample_folder_path, f"{sample}-{LABEL_NAME}.nii"))
+            preprocessed_paths.append(os.path.join(sample_folder_path, f"{sample}-{T1C_SCAN_TYPE}-{PRE_PROCESSED_IMAGE_SUFFIX}.nii"))
 
     result['scan_name'] = scan_names
     result['t1c_path'] = t1c_scan_paths
@@ -175,17 +188,15 @@ def extract_data():
     result['label_path'] = label_paths
 
     if APPLY_PRE_PROCESSING:
-        print("\n🧪 Testing apply_img_processing return format...\n")
-        paths = result.apply(
-            lambda row: apply_img_processing(row['t1c_path'], scan_type=T1C_SCAN_TYPE), axis=1)
-
-        print("Returned type:", type(paths))
-        print("Sample output:")
-        print(paths.head())  # 👈 this is crucial
-
-        result['t1c_processed_scan_path'] = paths  # Only assign if it's valid
+        print("🧪 Applying image processing for T1C scans...")
+        result['t1c_processed_scan_path'] = result['t1c_path'].apply(
+            lambda path: apply_img_processing(path, scan_type=T1C_SCAN_TYPE)
+        )
     else:
         result['t1c_processed_scan_path'] = preprocessed_paths
+
+    return result
+
 
 
 class BRATSMetsDataset(Dataset):
