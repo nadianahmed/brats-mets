@@ -180,3 +180,22 @@ def extract_data():
         result['t1c_processed_scan_path'] = preprocessed_paths
 
     return result
+
+# Device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# Instantiate model
+model = AttentionUNet3D(in_channels=1, out_channels=2).to(device)  # Assuming 2-class segmentation
+
+# Optimizer and Loss
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+criterion = torch.nn.CrossEntropyLoss()  # For multi-class segmentation
+
+# Create the dataset
+dataset = BRATSMetsDataset(dataframe=data)
+
+# DataLoader
+dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
+
+# Train for one epoch
+train_one_epoch(model, dataloader, criterion, optimizer, device)
