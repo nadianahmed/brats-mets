@@ -153,8 +153,8 @@ def extract_data():
     scan_names, t1c_scan_paths, t1n_scan_paths, t2f_scan_paths, t2w_scan_paths, label_paths, preprocessed_paths = [], [], [], [], [], [], []
 
     for sample in os.listdir(extracted_data_folder):
-    path = os.path.join(extracted_data_folder, sample)
-    if os.path.isdir(path) and sample.startswith("BraTS-MET-"):
+        path = os.path.join(extracted_data_folder, sample)
+        if os.path.isdir(path) and sample.startswith("BraTS-MET-"):
             scan_base = os.path.basename(path)
             scan_names.append(scan_base)
             t1c_scan_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}.nii"))
