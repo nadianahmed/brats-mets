@@ -157,15 +157,20 @@ def extract_data():
     scan_names, t1c_scan_paths, t1n_scan_paths, t2f_scan_paths, t2w_scan_paths, label_paths, preprocessed_paths = [], [], [], [], [], [], []
 
     for sample in os.listdir(extracted_data_folder):
-        if PROJECT_NAME_PREFIX in sample:
-            path = os.path.join(extracted_data_folder, sample)
-            scan_names.append(sample)
-            t1c_scan_paths.append(os.path.join(path, f"{sample}-{T1C_SCAN_TYPE}.nii.gz"))
-            t1n_scan_paths.append(os.path.join(path, f"{sample}-{T1N_SCAN_TYPE}.nii.gz"))
-            t2f_scan_paths.append(os.path.join(path, f"{sample}-{T2F_SCAN_TYPE}.nii.gz"))
-            t2w_scan_paths.append(os.path.join(path, f"{sample}-{T2W_SCAN_TYPE}.nii.gz"))
-            label_paths.append(os.path.join(path, f"{sample}-{LABEL_NAME}.nii.gz"))
-            preprocessed_paths.append(os.path.join(path, f"{sample}-{T1C_SCAN_TYPE}-{PRE_PROCESSED_IMAGE_SUFFIX}.nii.gz"))
+        path = os.path.join(extracted_data_folder, sample)
+        if os.path.isdir(path) and PROJECT_NAME_PREFIX in sample:
+            scan_base = os.path.basename(path)  # e.g., "BraTS-MET-00002-000"
+            scan_names.append(scan_base)
+
+            # Update extensions to .nii instead of .nii.gz
+            t1c_scan_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}.nii"))
+            t1n_scan_paths.append(os.path.join(path, f"{scan_base}-{T1N_SCAN_TYPE}.nii"))
+            t2f_scan_paths.append(os.path.join(path, f"{scan_base}-{T2F_SCAN_TYPE}.nii"))
+            t2w_scan_paths.append(os.path.join(path, f"{scan_base}-{T2W_SCAN_TYPE}.nii"))
+            label_paths.append(os.path.join(path, f"{scan_base}-{LABEL_NAME}.nii"))
+
+            # Save output as .nii to match format unless you're saving .nii.gz
+            preprocessed_paths.append(os.path.join(path, f"{scan_base}-{T1C_SCAN_TYPE}-{PRE_PROCESSED_IMAGE_SUFFIX}.nii"))
 
     result['scan_name'] = scan_names
     result['t1c_path'] = t1c_scan_paths
@@ -175,7 +180,8 @@ def extract_data():
     result['label_path'] = label_paths
 
     if APPLY_PRE_PROCESSING:
-        result['t1c_processed_scan_path'] = result.apply(lambda row: apply_img_processing(row['t1c_path'], scan_type=T1C_SCAN_TYPE), axis=1)
+        result['t1c_processed_scan_path'] = result.apply(
+            lambda row: apply_img_processing(row['t1c_path'], scan_type=T1C_SCAN_TYPE), axis=1)
     else:
         result['t1c_processed_scan_path'] = preprocessed_paths
 
