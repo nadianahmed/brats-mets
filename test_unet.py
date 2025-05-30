@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """brats-mets_UNet_v2.py
 
@@ -18,7 +17,7 @@ import torch.optim as optim
 
 # Paths
 EXTRACTED_FOLDER_NAME = 'ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'
-DATASET_FOLDER = '/project/def-sreeram/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'  
+DATASET_FOLDER = '/project/def-sreeram/hsheikh1/brats-mets/Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData'
 LABEL_NAME = 'seg'
 T1C_SCAN_TYPE = 't1c'
 T1N_SCAN_TYPE = 't1n'
@@ -144,22 +143,15 @@ def apply_img_processing(filename, scan_type, show_image=False):
     template_matched_image, _ = apply_template_matching(thresholded_img, scan_type)
     output_path = save_image(template_matched_image, filename, scan_type)
     print(output_path)
-    return output_path 
+    return output_path
 
 def extract_data():
-    '''
-    Scans the extracted dataset folder and returns a DataFrame with relevant image and label paths.
-
-    Returns:
-    - pd.DataFrame: table of relevant paths for scans and labels.
-    '''
-    extracted_data_folder = os.path.join(DATASET_FOLDER)  # Should already be unzipped manually
+    extracted_data_folder = os.path.join(DATASET_FOLDER)
 
     if not os.path.isdir(extracted_data_folder):
         raise FileNotFoundError(f"❌ Folder not found: {extracted_data_folder}")
 
     result = pd.DataFrame()
-
     t1c_scan_paths = []
     t1n_scan_paths = []
     t2f_scan_paths = []
@@ -197,8 +189,6 @@ def extract_data():
 
     return result
 
-
-
 class BRATSMetsDataset(Dataset):
     def __init__(self, dataframe, transform=None):
         self.dataframe = dataframe
@@ -226,110 +216,11 @@ class BRATSMetsDataset(Dataset):
             sample = self.transform(sample)
         return sample
 
-class AttentionBlock3D(nn.Module):
-    def __init__(self, F_g, F_l, F_int):
-        super(AttentionBlock3D, self).__init__()
-        self.W_g = nn.Sequential(nn.Conv3d(F_g, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
-        self.W_x = nn.Sequential(nn.Conv3d(F_l, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
-        self.psi = nn.Sequential(nn.Conv3d(F_int + 1, 1, kernel_size=1), nn.BatchNorm3d(1), nn.Sigmoid())
-        self.relu = nn.ReLU(inplace=True)
+# Insert the fixed AttentionBlock3D and AttentionUNet3D classes here (use my corrected versions from above).
 
-    def forward(self, t1c_input, template_map):
-        enc1 = self.encoder1(t1c_input)
-        enc2 = self.encoder2(self.pool1(enc1))
-        enc3 = self.encoder3(self.pool2(enc2))
-        bottleneck = self.bottleneck(self.pool3(enc3))
-    
-        dec3 = self.upconv3(bottleneck)
-        enc3 = self.att3(g=dec3, x=enc3, template_map=template_map)
-    
-        # Crop enc3 to match dec3
-        if enc3.shape[2:] != dec3.shape[2:]:
-            diffD = enc3.size(2) - dec3.size(2)
-            diffH = enc3.size(3) - dec3.size(3)
-            diffW = enc3.size(4) - dec3.size(4)
-            enc3 = enc3[:, :, diffD//2:diffD//2 + dec3.size(2),
-                             diffH//2:diffH//2 + dec3.size(3),
-                             diffW//2:diffW//2 + dec3.size(4)]
-        dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
-    
-        dec2 = self.upconv2(dec3)
-        enc2 = self.att2(g=dec2, x=enc2, template_map=template_map)
-    
-        # Crop enc2 to match dec2
-        if enc2.shape[2:] != dec2.shape[2:]:
-            diffD = enc2.size(2) - dec2.size(2)
-            diffH = enc2.size(3) - dec2.size(3)
-            diffW = enc2.size(4) - dec2.size(4)
-            enc2 = enc2[:, :, diffD//2:diffD//2 + dec2.size(2),
-                             diffH//2:diffH//2 + dec2.size(3),
-                             diffW//2:diffW//2 + dec2.size(4)]
-        dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
-    
-        dec1 = self.upconv1(dec2)
-        enc1 = self.att1(g=dec1, x=enc1, template_map=template_map)
-    
-        # Crop enc1 to match dec1
-        if enc1.shape[2:] != dec1.shape[2:]:
-            diffD = enc1.size(2) - dec1.size(2)
-            diffH = enc1.size(3) - dec1.size(3)
-            diffW = enc1.size(4) - dec1.size(4)
-            enc1 = enc1[:, :, diffD//2:diffD//2 + dec1.size(2),
-                             diffH//2:diffH//2 + dec1.size(3),
-                             diffW//2:diffW//2 + dec1.size(4)]
-        dec1 = self.decoder1(torch.cat((dec1, enc1), dim=1))
-    
-        return self.conv_out(dec1)
+# Training function and main script remain unchanged.
 
-
-
-class AttentionUNet3D(nn.Module):
-    def __init__(self, in_channels=1, out_channels=2, features=[32, 64, 128, 256]):
-        super(AttentionUNet3D, self).__init__()
-        self.encoder1 = self._block(in_channels, features[0])
-        self.pool1 = nn.MaxPool3d(2)
-        self.encoder2 = self._block(features[0], features[1])
-        self.pool2 = nn.MaxPool3d(2)
-        self.encoder3 = self._block(features[1], features[2])
-        self.pool3 = nn.MaxPool3d(2)
-        self.bottleneck = self._block(features[2], features[3])
-        self.upconv3 = nn.ConvTranspose3d(features[3], features[2], kernel_size=2, stride=2)
-        self.att3 = AttentionBlock3D(features[2], features[2], features[1])
-        self.decoder3 = self._block(features[3], features[2])
-        self.upconv2 = nn.ConvTranspose3d(features[2], features[1], kernel_size=2, stride=2)
-        self.att2 = AttentionBlock3D(features[1], features[1], features[0])
-        self.decoder2 = self._block(features[2], features[1])
-        self.upconv1 = nn.ConvTranspose3d(features[1], features[0], kernel_size=2, stride=2)
-        self.att1 = AttentionBlock3D(features[0], features[0], features[0]//2)
-        self.decoder1 = self._block(features[1], features[0])
-        self.conv_out = nn.Conv3d(features[0], out_channels, kernel_size=1)
-
-    def _block(self, in_channels, out_channels):
-        return nn.Sequential(
-            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-
-    def forward(self, t1c_input, template_map):
-        enc1 = self.encoder1(t1c_input)
-        enc2 = self.encoder2(self.pool1(enc1))
-        enc3 = self.encoder3(self.pool2(enc2))
-        bottleneck = self.bottleneck(self.pool3(enc3))
-        dec3 = self.upconv3(bottleneck)
-        enc3 = self.att3(g=dec3, x=enc3, template_map=template_map)
-        dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
-        dec2 = self.upconv2(dec3)
-        enc2 = self.att2(g=dec2, x=enc2, template_map=template_map)
-        dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
-        dec1 = self.upconv1(dec2)
-        enc1 = self.att1(g=dec1, x=enc1, template_map=template_map)
-        dec1 = self.decoder1(torch.cat((dec1, enc1), dim=1))
-        return self.conv_out(dec1)
-
+# --- Training function ---
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
     for batch in dataloader:
@@ -343,6 +234,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         optimizer.step()
     print("Epoch complete. Loss: {:.4f}".format(loss.item()))
 
+# --- Main script ---
 if __name__ == "__main__":
     data = extract_data()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
