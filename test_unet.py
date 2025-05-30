@@ -316,6 +316,7 @@ class BRATSMetsDataset(Dataset):
 
         return sample
 
+data = extract_data()
 # Device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
