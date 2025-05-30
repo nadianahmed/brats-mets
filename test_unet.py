@@ -241,7 +241,7 @@ class AttentionBlock3D(nn.Module):
         bottleneck = self.bottleneck(self.pool3(enc3))
     
         dec3 = self.upconv3(bottleneck)
-        enc3 = self.att3(dec3, enc3, template_map)
+        enc3 = self.att3(g=dec3, x=enc3, template_map=template_map)
     
         # Crop enc3 to match dec3
         if enc3.shape[2:] != dec3.shape[2:]:
@@ -254,7 +254,7 @@ class AttentionBlock3D(nn.Module):
         dec3 = self.decoder3(torch.cat((dec3, enc3), dim=1))
     
         dec2 = self.upconv2(dec3)
-        enc2 = self.att2(dec2, enc2, template_map)
+        enc2 = self.att2(g=dec2, x=enc2, template_map=template_map)
     
         # Crop enc2 to match dec2
         if enc2.shape[2:] != dec2.shape[2:]:
@@ -267,7 +267,7 @@ class AttentionBlock3D(nn.Module):
         dec2 = self.decoder2(torch.cat((dec2, enc2), dim=1))
     
         dec1 = self.upconv1(dec2)
-        enc1 = self.att1(dec1, enc1, template_map)
+        enc1 = self.att1(g=dec1, x=enc1, template_map=template_map)
     
         # Crop enc1 to match dec1
         if enc1.shape[2:] != dec1.shape[2:]:
