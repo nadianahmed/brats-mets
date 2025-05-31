@@ -270,41 +270,24 @@ class AttentionBlock3D(nn.Module):
             nn.Sigmoid()
         )
         self.relu = nn.ReLU(inplace=True)
-
+        
     def forward(self, g, x, template_map):
         g1 = self.W_g(g)
         x1 = self.W_x(x)
-
-        # Crop x1 to match g1
+    
         if x1.shape[2:] != g1.shape[2:]:
-            diffD = x1.size(2) - g1.size(2)
-            diffH = x1.size(3) - g1.size(3)
-            diffW = x1.size(4) - g1.size(4)
-            x1 = x1[:, :, diffD//2:diffD//2 + g1.size(2),
-                         diffH//2:diffH//2 + g1.size(3),
-                         diffW//2:diffW//2 + g1.size(4)]
-
+            x1 = crop_or_pad(x1, g1.shape[2:])
+    
         psi = self.relu(g1 + x1)
-
-        # Resize template_map to match psi
+    
         if template_map.shape[2:] != psi.shape[2:]:
             template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
-
-        # Validate template_map shape
-        assert template_map.shape[1] == 1, f"Expected template_map to have 1 channel, got {template_map.shape[1]}"
-
+    
         psi = torch.cat([psi, template_map], dim=1)
         psi = self.psi(psi)
-
-        # Crop psi to match x before multiplication
-        if psi.shape[2:] != x.shape[2:]:
-            diffD = psi.size(2) - x.size(2)
-            diffH = psi.size(3) - x.size(3)
-            diffW = psi.size(4) - x.size(4)
-            psi = psi[:, :, diffD//2:diffD//2 + x.size(2),
-                           diffH//2:diffH//2 + x.size(3),
-                           diffW//2:diffW//2 + x.size(4)]
-
+    
+        psi = crop_or_pad(psi, x.shape[2:])
+    
         return x * psi
 
 class AttentionUNet3D(nn.Module):
