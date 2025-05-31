@@ -8,4 +8,6 @@
 
 cd /project/def-sreeram/hsheikh1/brats-mets || exit 1
 
+export PYTORCH_NO_CUDA_MEMORY_CACHING=1
+
 python -u test_unet.py
