@@ -371,15 +371,21 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     for batch in dataloader:
         images = batch['image'].to(device)
         attn = batch['attention'].to(device)
-        labels = batch['label'].to(device).squeeze(1)
-        outputs = model(images, attn)
-        # Crop or pad outputs to match label shape
+        labels = batch['label'].to(device).squeeze(1)  # [N, D, H, W]
+
+        outputs = model(images, attn)  # [N, C, D, H, W]
+
+        # Adjust shapes to match
         outputs = crop_or_pad(outputs, labels.shape[1:])
+        labels = crop_or_pad(labels.unsqueeze(1), outputs.shape[2:]).squeeze(1)
+
         loss = criterion(outputs, labels)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-    print("Epoch complete. Loss: {:.4f}".format(loss.item()))
+    print(f"Epoch complete. Loss: {loss.item():.4f}")
+
 
 # --- Main script ---
 from sklearn.model_selection import train_test_split
