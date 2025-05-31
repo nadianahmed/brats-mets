@@ -388,5 +388,5 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
     dataset = BRATSMetsDataset(dataframe=data)
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
     train_one_epoch(model, dataloader, criterion, optimizer, device)
