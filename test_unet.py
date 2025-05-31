@@ -373,6 +373,8 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         attn = batch['attention'].to(device)
         labels = batch['label'].to(device).squeeze(1)
         outputs = model(images, attn)
+        # Crop or pad outputs to match label shape
+        outputs = crop_or_pad(outputs, labels.shape[1:])
         loss = criterion(outputs, labels)
         optimizer.zero_grad()
         loss.backward()
