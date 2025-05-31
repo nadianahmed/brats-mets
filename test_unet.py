@@ -218,11 +218,21 @@ class BRATSMetsDataset(Dataset):
 
 # Insert the fixed AttentionBlock3D and AttentionUNet3D classes here (use my corrected versions from above).
 class AttentionBlock3D(nn.Module):
-    def __init__(self, F_g, F_l, F_int):
+    def __init__(self, F_g, F_l, F_int, template_channels=1):
         super(AttentionBlock3D, self).__init__()
-        self.W_g = nn.Sequential(nn.Conv3d(F_g, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
-        self.W_x = nn.Sequential(nn.Conv3d(F_l, F_int, kernel_size=1), nn.BatchNorm3d(F_int))
-        self.psi = nn.Sequential(nn.Conv3d(F_int + 1, 1, kernel_size=1), nn.BatchNorm3d(1), nn.Sigmoid())
+        self.W_g = nn.Sequential(
+            nn.Conv3d(F_g, F_int, kernel_size=1),
+            nn.BatchNorm3d(F_int)
+        )
+        self.W_x = nn.Sequential(
+            nn.Conv3d(F_l, F_int, kernel_size=1),
+            nn.BatchNorm3d(F_int)
+        )
+        self.psi = nn.Sequential(
+            nn.Conv3d(F_int + template_channels, 1, kernel_size=1),
+            nn.BatchNorm3d(1),
+            nn.Sigmoid()
+        )
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, g, x, template_map):
@@ -243,6 +253,9 @@ class AttentionBlock3D(nn.Module):
         # Resize template_map to match psi
         if template_map.shape[2:] != psi.shape[2:]:
             template_map = nn.functional.interpolate(template_map, size=psi.shape[2:], mode='trilinear', align_corners=False)
+
+        # Validate template_map shape
+        assert template_map.shape[1] == 1, f"Expected template_map to have 1 channel, got {template_map.shape[1]}"
 
         psi = torch.cat([psi, template_map], dim=1)
         psi = self.psi(psi)
