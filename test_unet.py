@@ -380,13 +380,25 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     print("Epoch complete. Loss: {:.4f}".format(loss.item()))
 
 # --- Main script ---
+from sklearn.model_selection import train_test_split
+
 if __name__ == "__main__":
     data = extract_data()
+    train_df, test_df = train_test_split(data, test_size=0.2, random_state=42, shuffle=True)
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
+
     model = AttentionUNet3D(in_channels=1, out_channels=2).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
-    dataset = BRATSMetsDataset(dataframe=data)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
-    train_one_epoch(model, dataloader, criterion, optimizer, device)
+
+    train_dataset = BRATSMetsDataset(dataframe=train_df)
+    test_dataset = BRATSMetsDataset(dataframe=test_df)
+
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
+
+    train_one_epoch(model, train_loader, criterion, optimizer, device)
+    evaluate_one_epoch(model, test_loader, criterion, device)
+
