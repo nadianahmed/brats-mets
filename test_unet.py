@@ -291,7 +291,7 @@ class AttentionBlock3D(nn.Module):
         return x * psi
 
 class AttentionUNet3D(nn.Module):
-    def __init__(self, in_channels=1, out_channels=2, features=[32, 64, 128, 256]):
+    def __init__(self, in_channels=1, out_channels=4, features=[32, 64, 128, 256]):
         super(AttentionUNet3D, self).__init__()
         self.encoder1 = self._block(in_channels, features[0])
         self.pool1 = nn.MaxPool3d(2)
@@ -397,7 +397,7 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
 
-    model = AttentionUNet3D(in_channels=1, out_channels=2).to(device)
+    model = AttentionUNet3D(in_channels=1, out_channels=4).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     criterion = torch.nn.CrossEntropyLoss()
 
