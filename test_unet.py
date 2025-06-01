@@ -385,10 +385,39 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
     print(f"Epoch complete. Loss: {loss.item():.4f}")
+    
+# --- Evaluation function ---
+def evaluate_one_epoch(model, dataloader, criterion, device):
+    model.eval()  # Set model to evaluation mode
+    total_loss = 0.0
+    num_batches = 0
+
+    with torch.no_grad():  # Disable gradient computation
+        for batch in dataloader:
+            images = batch['image'].to(device)
+            attn = batch['attention'].to(device)
+            labels = batch['label'].to(device).squeeze(1)  # [N, D, H, W]
+
+            outputs = model(images, attn)  # [N, C, D, H, W]
+
+            # Adjust shapes to match
+            outputs = crop_or_pad(outputs, labels.shape[1:])
+            labels = crop_or_pad(labels.unsqueeze(1), outputs.shape[2:]).squeeze(1)
+
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+            num_batches += 1
+
+    average_loss = total_loss / num_batches
+    print(f"Evaluation complete. Average Loss: {average_loss:.4f}")
+
+    return average_loss
+
 
 
 # --- Main script ---
 from sklearn.model_selection import train_test_split
+
 
 if __name__ == "__main__":
     data = extract_data()
