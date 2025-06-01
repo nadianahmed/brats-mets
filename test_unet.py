@@ -422,7 +422,52 @@ def recall_score(pred, target, num_classes):
         recall_per_class.append(recall.item())
     return recall_per_class
 
-def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
+def visualize_sample(image_tensor, attn_tensor, pred_tensor, label_tensor, output_dir, sample_name="sample"):
+    """
+    Visualize and save MRI image, attention mask, ground truth, and prediction.
+    
+    Args:
+        image_tensor: torch.Tensor, shape [1, D, H, W]
+        attn_tensor: torch.Tensor, shape [1, D, H, W]
+        pred_tensor: torch.Tensor, shape [D, H, W]
+        label_tensor: torch.Tensor, shape [D, H, W]
+        output_dir: str, directory to save the images
+        sample_name: str, name prefix for the saved files
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Pick a central slice in the depth dimension
+    D = image_tensor.shape[1]
+    slice_idx = D // 2
+    
+    # Convert to numpy
+    image_np = image_tensor[0, slice_idx, :, :].cpu().numpy()
+    attn_np = attn_tensor[0, slice_idx, :, :].cpu().numpy()
+    pred_np = pred_tensor[slice_idx, :, :].cpu().numpy()
+    label_np = label_tensor[slice_idx, :, :].cpu().numpy()
+    
+    # Plot and save
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
+    axes[0].imshow(image_np, cmap='gray')
+    axes[0].set_title("Original MRI (T1c)")
+    axes[1].imshow(attn_np, cmap='hot')
+    axes[1].set_title("Attention Mask")
+    axes[2].imshow(label_np, cmap='tab20')
+    axes[2].set_title("Ground Truth")
+    axes[3].imshow(pred_np, cmap='tab20')
+    axes[3].set_title("Model Prediction")
+
+    for ax in axes:
+        ax.axis('off')
+
+    plt.tight_layout()
+    output_path = os.path.join(output_dir, f"{sample_name}_visualization.png")
+    plt.savefig(output_path)
+    plt.close()
+    print(f"Visualization saved at: {output_path}")
+
+
+def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4, output_dir="visualizations"):
     model.eval()
     total_loss = 0.0
     total_dice = np.zeros(num_classes)
@@ -433,7 +478,7 @@ def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
     num_batches = 0
 
     with torch.no_grad():
-        for batch in dataloader:
+        for batch_idx, batch in enumerate(dataloader):
             images = batch['image'].to(device)
             attn = batch['attention'].to(device)
             labels = batch['label'].to(device).squeeze(1)  # [N, D, H, W]
@@ -445,22 +490,30 @@ def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
             loss = criterion(outputs, labels)
             total_loss += loss.item()
 
-            # Voxel-wise predictions
             preds = torch.argmax(outputs, dim=1)  # [N, D, H, W]
 
-            # Compute metrics per class
+            # Compute metrics
             batch_dice = dice_score(preds, labels, num_classes)
             batch_precision = precision_score(preds, labels, num_classes)
             batch_recall = recall_score(preds, labels, num_classes)
             total_dice += np.array(batch_dice)
             total_precision += np.array(batch_precision)
             total_recall += np.array(batch_recall)
-
-            # Accuracy
             total_correct += (preds == labels).sum().item()
             total_voxels += torch.numel(labels)
-
             num_batches += 1
+
+            # Save visualization for each sample in the batch
+            for sample_idx in range(images.shape[0]):
+                sample_name = f"batch_{batch_idx}_sample_{sample_idx}"
+                visualize_sample(
+                    images[sample_idx].cpu(),
+                    attn[sample_idx].cpu(),
+                    preds[sample_idx].cpu(),
+                    labels[sample_idx].cpu(),
+                    output_dir=output_dir,
+                    sample_name=sample_name
+                )
 
     average_loss = total_loss / num_batches
     average_dice = total_dice / num_batches
@@ -475,6 +528,8 @@ def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
         print(f"  Class {cls}: Dice = {average_dice[cls]:.4f}, Precision = {average_precision[cls]:.4f}, Recall = {average_recall[cls]:.4f}")
 
     return average_loss, average_accuracy, average_dice, average_precision, average_recall
+
+
 
 
 from sklearn.model_selection import train_test_split
