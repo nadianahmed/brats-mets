@@ -387,31 +387,94 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     print(f"Epoch complete. Loss: {loss.item():.4f}")
     
 # --- Evaluation function ---
-def evaluate_one_epoch(model, dataloader, criterion, device):
-    model.eval()  # Set model to evaluation mode
+def dice_score(pred, target, num_classes):
+    smooth = 1e-5
+    dice_per_class = []
+    for cls in range(num_classes):
+        pred_cls = (pred == cls).float()
+        target_cls = (target == cls).float()
+        intersection = (pred_cls * target_cls).sum()
+        dice = (2. * intersection + smooth) / (pred_cls.sum() + target_cls.sum() + smooth)
+        dice_per_class.append(dice.item())
+    return dice_per_class
+
+def precision_score(pred, target, num_classes):
+    smooth = 1e-5
+    precision_per_class = []
+    for cls in range(num_classes):
+        pred_cls = (pred == cls).float()
+        target_cls = (target == cls).float()
+        tp = (pred_cls * target_cls).sum()
+        fp = (pred_cls * (1 - target_cls)).sum()
+        precision = (tp + smooth) / (tp + fp + smooth)
+        precision_per_class.append(precision.item())
+    return precision_per_class
+
+def recall_score(pred, target, num_classes):
+    smooth = 1e-5
+    recall_per_class = []
+    for cls in range(num_classes):
+        pred_cls = (pred == cls).float()
+        target_cls = (target == cls).float()
+        tp = (pred_cls * target_cls).sum()
+        fn = ((1 - pred_cls) * target_cls).sum()
+        recall = (tp + smooth) / (tp + fn + smooth)
+        recall_per_class.append(recall.item())
+    return recall_per_class
+
+def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
+    model.eval()
     total_loss = 0.0
+    total_dice = np.zeros(num_classes)
+    total_precision = np.zeros(num_classes)
+    total_recall = np.zeros(num_classes)
+    total_correct = 0
+    total_voxels = 0
     num_batches = 0
 
-    with torch.no_grad():  # Disable gradient computation
+    with torch.no_grad():
         for batch in dataloader:
             images = batch['image'].to(device)
             attn = batch['attention'].to(device)
             labels = batch['label'].to(device).squeeze(1)  # [N, D, H, W]
 
             outputs = model(images, attn)  # [N, C, D, H, W]
-
-            # Adjust shapes to match
             outputs = crop_or_pad(outputs, labels.shape[1:])
             labels = crop_or_pad(labels.unsqueeze(1), outputs.shape[2:]).squeeze(1)
 
             loss = criterion(outputs, labels)
             total_loss += loss.item()
+
+            # Voxel-wise predictions
+            preds = torch.argmax(outputs, dim=1)  # [N, D, H, W]
+
+            # Compute metrics per class
+            batch_dice = dice_score(preds, labels, num_classes)
+            batch_precision = precision_score(preds, labels, num_classes)
+            batch_recall = recall_score(preds, labels, num_classes)
+            total_dice += np.array(batch_dice)
+            total_precision += np.array(batch_precision)
+            total_recall += np.array(batch_recall)
+
+            # Accuracy
+            total_correct += (preds == labels).sum().item()
+            total_voxels += torch.numel(labels)
+
             num_batches += 1
 
     average_loss = total_loss / num_batches
-    print(f"Evaluation complete. Average Loss: {average_loss:.4f}")
+    average_dice = total_dice / num_batches
+    average_precision = total_precision / num_batches
+    average_recall = total_recall / num_batches
+    average_accuracy = total_correct / total_voxels
 
-    return average_loss
+    print(f"Evaluation complete.")
+    print(f"  Average Loss: {average_loss:.4f}")
+    print(f"  Average Accuracy: {average_accuracy:.4f}")
+    for cls in range(num_classes):
+        print(f"  Class {cls}: Dice = {average_dice[cls]:.4f}, Precision = {average_precision[cls]:.4f}, Recall = {average_recall[cls]:.4f}")
+
+    return average_loss, average_accuracy, average_dice, average_precision, average_recall
 
 
 
