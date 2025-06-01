@@ -529,9 +529,6 @@ def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4, outp
 
     return average_loss, average_accuracy, average_dice, average_precision, average_recall
 
-
-
-
 from sklearn.model_selection import train_test_split
 
 if __name__ == "__main__":
@@ -561,7 +558,8 @@ if __name__ == "__main__":
         train_one_epoch(model, train_loader, criterion, optimizer, device)
 
     print("\nFinal evaluation on test set:")
-    evaluate_one_epoch(model, test_loader, criterion, device, num_classes=4)
+    evaluate_one_epoch(model, test_loader, criterion, device, num_classes=4, output_dir="my_visualizations")
+
 
 
 
