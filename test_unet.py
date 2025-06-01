@@ -488,7 +488,10 @@ if __name__ == "__main__":
 
     model = AttentionUNet3D(in_channels=1, out_channels=4).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    criterion = torch.nn.CrossEntropyLoss()
+
+    # Class weights: background=0.1, tumors=1.0 each (adjust as needed)
+    class_weights = torch.tensor([0.1, 1.0, 1.0, 1.0], dtype=torch.float32).to(device)
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 
     train_dataset = BRATSMetsDataset(dataframe=train_df)
     test_dataset = BRATSMetsDataset(dataframe=test_df)
@@ -501,6 +504,9 @@ if __name__ == "__main__":
     for epoch in range(1, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
         train_one_epoch(model, train_loader, criterion, optimizer, device)
-        evaluate_one_epoch(model, test_loader, criterion, device, num_classes=4)
+
+    print("\nFinal evaluation on test set:")
+    evaluate_one_epoch(model, test_loader, criterion, device, num_classes=4)
+
 
 
