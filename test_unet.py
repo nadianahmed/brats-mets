@@ -477,10 +477,7 @@ def evaluate_one_epoch(model, dataloader, criterion, device, num_classes=4):
     return average_loss, average_accuracy, average_dice, average_precision, average_recall
 
 
-
-# --- Main script ---
 from sklearn.model_selection import train_test_split
-
 
 if __name__ == "__main__":
     data = extract_data()
@@ -499,6 +496,11 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=4)
 
-    train_one_epoch(model, train_loader, criterion, optimizer, device)
-    evaluate_one_epoch(model, test_loader, criterion, device)
+    num_epochs = 20  # Change this as needed
+
+    for epoch in range(1, num_epochs + 1):
+        print(f"\nEpoch {epoch}/{num_epochs}")
+        train_one_epoch(model, train_loader, criterion, optimizer, device)
+        evaluate_one_epoch(model, test_loader, criterion, device, num_classes=4)
+
 
