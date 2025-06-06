@@ -4,6 +4,7 @@ from skimage.feature import match_template
 from scipy.ndimage import gaussian_filter, maximum_filter, label, center_of_mass
 
 import Pre_Processing.constants as constants
+
 from Helpers.scrollable_scan_viewer import ScrollableScanViewer
 from Helpers.file_helper import get_image_name_from_path, get_image_parent_path
 

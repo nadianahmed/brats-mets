@@ -59,8 +59,9 @@ def extract_data(apply_preprocessing, scan_type):
     if apply_preprocessing:
         print(f"🧪 Applying pre-processing for {scan_type} scans...")
         processed_paths = []
+        print_progress_bar(0, len(scan_names), prefix='Progress:', suffix='Complete', length=50)
         for i, path in enumerate(result[scan_type + '_path']):
-            print_progress_bar(i, len(scan_names), prefix='Progress:', suffix='Complete', length=50)
+            print_progress_bar(i+1, len(scan_names), prefix='Progress:', suffix='Complete', length=50)
             processed = apply_pre_processing(path, scan_type=scan_type)
             processed_paths.append(processed)
         result[scan_type + '_processed_scan_path'] = processed_paths

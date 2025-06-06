@@ -3,7 +3,9 @@ from torch.utils.data import DataLoader
 
 from Pre_Processing.data_preparation import extract_data
 from Pre_Processing.dataset_wrapper import ImageWithAttentionDataset
+
 from Model.model_utilities import ModelUtilities
+
 import constants as constants
 
 if __name__ == "__main__":
