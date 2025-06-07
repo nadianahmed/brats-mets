@@ -39,7 +39,7 @@ class ModelUtilities():
         training_progress = 0
 
         for batch in dataloader:
-            print_progress_bar(training_progress, len(dataloader), prefix='Progress:', suffix='Complete', length=50)
+            print_progress_bar(training_progress, len(dataloader))
 
             images = batch['image'].to(self.device)
             attn = batch['attention'].to(self.device)
@@ -58,7 +58,7 @@ class ModelUtilities():
             self.optimizer.step()
             training_progress += 1
 
-        print_progress_bar(training_progress, len(dataloader), prefix='Progress:', suffix='Complete', length=50)
+        print_progress_bar(training_progress, len(dataloader))
         print(f"Epoch complete. Loss: {loss.item():.4f}")
 
     def evaluate_one_epoch(self, dataloader, num_classes=constants.NUM_CLASSES):
@@ -78,7 +78,7 @@ class ModelUtilities():
         num_batches = 0
         with torch.no_grad():
             for batch_idx, batch in enumerate(dataloader):
-                print_progress_bar(num_batches, len(dataloader), prefix='Progress:', suffix='Complete', length=50)
+                print_progress_bar(num_batches, len(dataloader))
 
                 images = batch['image'].to(self.device)
                 attn = batch['attention'].to(self.device)
@@ -103,9 +103,8 @@ class ModelUtilities():
                 total_correct += (preds == labels).sum().item()
                 total_voxels += torch.numel(labels)
                 num_batches += 1
-                evaluation_progress += 1
 
-        print_progress_bar(num_batches, len(dataloader), prefix='Progress:', suffix='Complete', length=50)
+        print_progress_bar(num_batches, len(dataloader))
 
         average_loss = total_loss / num_batches
         average_dice = total_dice / num_batches
