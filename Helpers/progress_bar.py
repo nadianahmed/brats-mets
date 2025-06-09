@@ -18,4 +18,4 @@ def print_progress_bar (iteration, total, prefix = 'Progress:', suffix = 'Comple
     print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
 
     if iteration == total: 
-        print(f'{prefix} |{bar}| {100.0}% {suffix}', end = " ✅\n")
+        print(f'{prefix} |{bar}| {100.0}% {suffix}', end = " ✅\n\n")
