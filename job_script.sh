@@ -8,6 +8,6 @@
 
 cd /project/def-sreeram/hsheikh1/brats-mets || exit 1
 
-export PYTORCH_CUDA_ALLOC_CONF =expandable_segments:True
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-python -u test_unet.py
+python -u main.py

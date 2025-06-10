@@ -23,5 +23,5 @@ python main.py
 ```
 
 <p align="center">
-    <img src="Images/demo.png" alt="hermes" width="800">
+    <img src="Images/preprocessing_demo.png" alt="Pre-Processing Demo" width="800">
 </p>
