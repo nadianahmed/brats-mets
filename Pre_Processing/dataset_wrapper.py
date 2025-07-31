@@ -43,6 +43,7 @@ class ImageWithAttentionDataset(Dataset):
         attn_mask = np.expand_dims(attn_mask, axis=0)
         seg = nib.load(row['label_path']).get_fdata()
         seg = np.expand_dims(seg, axis=0)
+        seg[seg != 0] = 1  # Binarize labels for binary segmentation
         t1c_img = (t1c_img - np.min(t1c_img)) / (np.max(t1c_img) - np.min(t1c_img) + 1e-5)
         attn_mask = (attn_mask - np.min(attn_mask)) / (np.max(attn_mask) - np.min(attn_mask) + 1e-5)
         sample = {
