@@ -30,6 +30,6 @@ if __name__ == "__main__":
 
         print("\n📊 Final evaluation on test set:")
         model_utilities.evaluate_one_epoch(test_loader)
-=======
+
 print("Hello")
 >>>>>>> Stashed changes
