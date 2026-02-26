@@ -32,4 +32,3 @@ if __name__ == "__main__":
         model_utilities.evaluate_one_epoch(test_loader)
 
 print("Hello")
->>>>>>> Stashed changes
