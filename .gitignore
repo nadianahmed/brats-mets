@@ -2,3 +2,4 @@
 Datasets/ASNR-MICCAI-BraTS2023-MET-Challenge-TrainingData*
 __pycache__
 *.out
+.venv/
